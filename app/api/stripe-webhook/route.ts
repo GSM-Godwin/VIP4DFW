@@ -43,11 +43,33 @@ export async function POST(req: Request) {
       const session = event.data.object as Stripe.Checkout.Session
       const bookingId = session.metadata?.booking_id
 
-      console.error(`VIP4DFW_WEBHOOK_DEBUG: Raw metadata: ${JSON.stringify(session.metadata)}`) // Log raw metadata
-      console.error(`VIP4DFW_WEBHOOK_DEBUG: Extracted bookingId: '${bookingId}' (Type: ${typeof bookingId})`) // Log extracted ID and its type
+      console.error(`VIP4DFW_WEBHOOK_DEBUG: Raw metadata: ${JSON.stringify(session.metadata)}`)
+      console.error(`VIP4DFW_WEBHOOK_DEBUG: Extracted bookingId: '${bookingId}' (Type: ${typeof bookingId})`)
 
       if (bookingId) {
-        console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to update booking ID: ${bookingId}`)
+        // --- DIAGNOSTIC STEP: Try to SELECT the booking first ---
+        console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to SELECT booking with ID: ${bookingId}`)
+        const { data: existingBooking, error: selectError } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("id", bookingId)
+          .single() // Use .single() to expect one row
+
+        if (selectError) {
+          console.error("VIP4DFW_WEBHOOK_DEBUG: Error selecting booking:", selectError.message)
+          // If the error is 'PGRST116' (no rows found), it means the ID wasn't matched
+          if (selectError.code === "PGRST116") {
+            console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT failed: No booking found with this ID.")
+          }
+          // Do not return here, proceed to update attempt to see its behavior
+        } else if (!existingBooking) {
+          console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT returned null/undefined booking.")
+        } else {
+          console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT successful. Existing booking:", existingBooking)
+        }
+        // --- END DIAGNOSTIC STEP ---
+
+        console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to UPDATE booking ID: ${bookingId}`)
         const { data, error } = await supabase
           .from("bookings")
           .update({ payment_status: "paid" })
