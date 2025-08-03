@@ -7,7 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-07-30.basil",
 })
 
-// This is important for Next.js to parse the raw body for webhook signature verification
+// IMPORTANT: Remember to uncomment this block after debugging if you removed it.
 // export const config = {
 //   api: {
 //     bodyParser: false,
@@ -15,11 +15,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 // }
 
 export async function POST(req: Request) {
-  console.log("Stripe Webhook received a request!"); // ADD THIS LINE
+  console.error("VIP4DFW_WEBHOOK_DEBUG: Webhook POST request received.") // Use console.error for higher visibility
   const buf = await req.text() // Read the raw body as text
   const sig = req.headers.get("stripe-signature")
 
   if (!sig) {
+    console.error("VIP4DFW_WEBHOOK_DEBUG: No Stripe signature header found.")
     return NextResponse.json({ error: "No Stripe signature header" }, { status: 400 })
   }
 
@@ -27,8 +28,9 @@ export async function POST(req: Request) {
 
   try {
     event = stripe.webhooks.constructEvent(buf, sig, process.env.STRIPE_WEBHOOK_SECRET!)
+    console.error(`VIP4DFW_WEBHOOK_DEBUG: Event type: ${event.type}`) // Log event type
   } catch (err: any) {
-    console.error(`Webhook Error: ${err.message}`)
+    console.error(`VIP4DFW_WEBHOOK_DEBUG: Webhook Error: ${err.message}`)
     return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
   }
 
@@ -41,22 +43,22 @@ export async function POST(req: Request) {
       const bookingId = session.metadata?.booking_id
 
       if (bookingId) {
-        console.log(`Checkout session completed for booking ID: ${bookingId}`)
+        console.error(`VIP4DFW_WEBHOOK_DEBUG: Checkout session completed for booking ID: ${bookingId}`)
         // Update your booking in Supabase
         const { data, error } = await supabase.from("bookings").update({ payment_status: "paid" }).eq("id", bookingId)
 
         if (error) {
-          console.error("Error updating booking payment status:", error.message)
+          console.error("VIP4DFW_WEBHOOK_DEBUG: Error updating booking payment status:", error.message)
           return NextResponse.json({ error: "Failed to update booking status" }, { status: 500 })
         }
-        console.log("Booking payment status updated to 'paid'.", data)
+        console.error("VIP4DFW_WEBHOOK_DEBUG: Booking payment status updated to 'paid'.", data)
       } else {
-        console.warn("Checkout session completed, but no booking_id found in metadata.")
+        console.warn("VIP4DFW_WEBHOOK_DEBUG: Checkout session completed, but no booking_id found in metadata.")
       }
       break
     // Add other event types you want to handle here
     default:
-      console.log(`Unhandled event type ${event.type}`)
+      console.error(`VIP4DFW_WEBHOOK_DEBUG: Unhandled event type ${event.type}`)
   }
 
   // Return a 200 response to acknowledge receipt of the event
