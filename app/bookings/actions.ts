@@ -100,6 +100,7 @@ export async function createBooking(
   }
 
   if (paymentMethod === "card") {
+    console.log("Booking ID before Stripe session creation:", booking.id)
     try {
       const origin = (await headers()).get("origin") // Await the headers() call
 

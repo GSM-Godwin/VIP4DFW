@@ -15,6 +15,7 @@ export const config = {
 }
 
 export async function POST(req: Request) {
+  console.log("Stripe Webhook received a request!"); // ADD THIS LINE
   const buf = await req.text() // Read the raw body as text
   const sig = req.headers.get("stripe-signature")
 
