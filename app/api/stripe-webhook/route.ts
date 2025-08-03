@@ -47,25 +47,23 @@ export async function POST(req: Request) {
       console.error(`VIP4DFW_WEBHOOK_DEBUG: Extracted bookingId: '${bookingId}' (Type: ${typeof bookingId})`)
 
       if (bookingId) {
-        // --- DIAGNOSTIC STEP: Try to SELECT the booking first ---
-        console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to SELECT booking with ID: ${bookingId}`)
-        const { data: existingBooking, error: selectError } = await supabase
+        // --- DIAGNOSTIC STEP: Try to SELECT the booking first without .single() ---
+        console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to SELECT booking with ID: ${bookingId} (without .single())`)
+        const { data: existingBookings, error: selectError } = await supabase
           .from("bookings")
           .select("*")
           .eq("id", bookingId)
-          .single() // Use .single() to expect one row
+        // Removed .single() to see the raw array result
 
         if (selectError) {
-          console.error("VIP4DFW_WEBHOOK_DEBUG: Error selecting booking:", selectError.message)
-          // If the error is 'PGRST116' (no rows found), it means the ID wasn't matched
-          if (selectError.code === "PGRST116") {
-            console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT failed: No booking found with this ID.")
-          }
-          // Do not return here, proceed to update attempt to see its behavior
-        } else if (!existingBooking) {
-          console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT returned null/undefined booking.")
+          console.error("VIP4DFW_WEBHOOK_DEBUG: Error selecting booking (raw):", selectError.message)
+        } else if (!existingBookings || existingBookings.length === 0) {
+          console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT returned no bookings.")
         } else {
-          console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT successful. Existing booking:", existingBooking)
+          console.error(
+            `VIP4DFW_WEBHOOK_DEBUG: SELECT successful. Found ${existingBookings.length} booking(s). First booking:`,
+            existingBookings[0],
+          )
         }
         // --- END DIAGNOSTIC STEP ---
 
@@ -74,6 +72,7 @@ export async function POST(req: Request) {
           .from("bookings")
           .update({ payment_status: "paid" })
           .eq("id", bookingId)
+          .limit(1) // Add limit(1) as a defensive measure
           .select() // Add .select() to return the updated data
 
         if (error) {
