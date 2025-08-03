@@ -8,11 +8,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 // This is important for Next.js to parse the raw body for webhook signature verification
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}
+// export const config = {
+//   api: {
+//     bodyParser: false,
+//   },
+// }
 
 export async function POST(req: Request) {
   console.log("Stripe Webhook received a request!"); // ADD THIS LINE
