@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server"
 import Stripe from "stripe"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { revalidatePath } from "next/cache" // Import revalidatePath
 
 // Initialize Stripe with your secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-07-30.basil",
 })
 
-// IMPORTANT: Remember to uncomment this block after debugging if you removed it.
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//   },
-// }
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+}
 
 export async function POST(req: Request) {
-  console.error("VIP4DFW_WEBHOOK_DEBUG: Webhook POST request received.") // Use console.error for higher visibility
+  console.error("VIP4DFW_WEBHOOK_DEBUG_START: Function entered.") // This is the absolute first log
   const buf = await req.text() // Read the raw body as text
   const sig = req.headers.get("stripe-signature")
 
@@ -45,13 +45,21 @@ export async function POST(req: Request) {
       if (bookingId) {
         console.error(`VIP4DFW_WEBHOOK_DEBUG: Checkout session completed for booking ID: ${bookingId}`)
         // Update your booking in Supabase
-        const { data, error } = await supabase.from("bookings").update({ payment_status: "paid" }).eq("id", bookingId)
+        const { data, error } = await supabase
+          .from("bookings")
+          .update({ payment_status: "paid" })
+          .eq("id", bookingId)
+          .select() // Add .select() to return the updated data
 
         if (error) {
           console.error("VIP4DFW_WEBHOOK_DEBUG: Error updating booking payment status:", error.message)
           return NextResponse.json({ error: "Failed to update booking status" }, { status: 500 })
         }
         console.error("VIP4DFW_WEBHOOK_DEBUG: Booking payment status updated to 'paid'.", data)
+
+        // Revalidate the dashboard path to show updated data
+        revalidatePath("/dashboard")
+        console.error("VIP4DFW_WEBHOOK_DEBUG: Revalidated /dashboard path.")
       } else {
         console.warn("VIP4DFW_WEBHOOK_DEBUG: Checkout session completed, but no booking_id found in metadata.")
       }
