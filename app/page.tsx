@@ -1,12 +1,12 @@
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Check, Star, Phone, Mail } from 'lucide-react'
-import { getServerSession } from "next-auth" // Import getServerSession
-import { BookingForm } from "@/components/booking-form" // Import the new BookingForm component
+import { getServerSession } from "next-auth"
+import { BookingForm } from "@/components/booking-form"
 import { Card } from "@/components/ui/card"
 export default async function HomePage() {
-  const session = await getServerSession() // Fetch session on the server
-  const user = session?.user || null // Get user object, or null if not logged in
+  const session = await getServerSession()
+  const user = session?.user || null
 
   return (
     <div className="min-h-screen bg-black text-white">
