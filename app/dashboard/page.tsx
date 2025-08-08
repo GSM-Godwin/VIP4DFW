@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation"
-import { getUser, signOut } from "@/app/auth/actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getUserBookings } from "@/app/bookings/actions"
 import { format } from "date-fns"
+import { getServerSession } from "next-auth" // Import getServerSession directly
 
 export default async function DashboardPage() {
-  const user = await getUser()
+  const session = await getServerSession() // Get session directly
+  const user = session?.user // Extract user from session
 
   if (!user) {
     redirect("/login")
@@ -23,7 +24,7 @@ export default async function DashboardPage() {
         <CardContent className="space-y-4 text-center">
           <p className="text-lg text-gray-300">Hello, {user.name || user.email}!</p>
           <p className="text-xl font-semibold text-vipo-DEFAULT">Your email: {user.email}</p>
-          <form action={signOut}>
+          <form action="/api/auth/signout" method="post"> {/* Use the standard NextAuth.js signout API route */}
             <Button
               type="submit"
               className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-2 px-6 rounded-full text-lg"
@@ -46,25 +47,25 @@ export default async function DashboardPage() {
               {bookings.map((booking) => (
                 <Card key={booking.id} className="bg-gray-700 border-gray-600 p-4">
                   <p className="text-lg font-semibold text-vipo-DEFAULT">
-                    {booking.pickup_location} to {booking.dropoff_location}
+                    {booking.pickupLocation} to {booking.dropoffLocation}
                   </p>
-                  <p className="text-gray-300">Date & Time: {format(new Date(booking.pickup_time), "PPP p")}</p>
-                  <p className="text-gray-300">Passengers: {booking.num_passengers}</p>
-                  <p className="text-gray-300">Service Type: {booking.service_type.replace(/_/g, " ")}</p>
-                  <p className="text-gray-300">Total Price: ${booking.total_price.toFixed(2)}</p>
+                  <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
+                  <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
+                  <p className="text-gray-300">Service Type: {booking.serviceType.replace(/_/g, " ")}</p>
+                  <p className="text-gray-300">Total Price: ${booking.totalPrice.toFixed(2)}</p>
                   <p className={`font-medium ${booking.status === "pending" ? "text-yellow-400" : "text-green-400"}`}>
                     Status: {booking.status}
                   </p>
                   <p
                     className={`font-medium ${
-                      booking.payment_status === "unpaid" || booking.payment_status === "pending_cash"
+                      booking.paymentStatus === "unpaid" || booking.paymentStatus === "pending_cash"
                         ? "text-yellow-400"
-                        : booking.payment_status === "paid"
+                        : booking.paymentStatus === "paid"
                           ? "text-green-400"
                           : "text-red-400"
                     }`}
                   >
-                    Payment: {booking.payment_status.replace(/_/g, " ")}
+                    Payment: {booking.paymentStatus.replace(/_/g, " ")}
                   </p>
                 </Card>
               ))}

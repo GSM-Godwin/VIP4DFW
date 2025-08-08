@@ -1,50 +1,12 @@
-"use client"
-
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Check, Star, Phone, Mail } from "lucide-react"
-import { useActionState, useState, useEffect } from "react"
-import { createBooking } from "@/app/bookings/actions"
-import { createSupabaseBrowserClient } from "@/lib/supabase/client"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group" 
-import { useRouter } from "next/navigation" 
-
-export default function HomePage() {
-  const router = useRouter()
-  const [state, formAction, isPending] = useActionState(createBooking, { success: false, message: "" })
-
-  const [contactName, setContactName] = useState("")
-  const [contactEmail, setContactEmail] = useState("")
-  const [contactPhone, setContactPhone] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState("card")
-
-  useEffect(() => {
-    const fetchUserData = async () => {
-      const supabase = createSupabaseBrowserClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (user) {
-        setContactEmail(user.email || "")
-        const { data: profile, error } = await supabase.from("profiles").select("name").eq("id", user.id).single()
-        if (profile) {
-          setContactName(profile.name || "")
-        }
-      }
-    }
-    fetchUserData()
-  }, [])
-
-  // Handle redirect after action completes
-  useEffect(() => {
-    if (state.success && state.redirectUrl) {
-      router.push(state.redirectUrl)
-    }
-  }, [state, router])
+import { Check, Star, Phone, Mail } from 'lucide-react'
+import { getServerSession } from "next-auth" // Import getServerSession
+import { BookingForm } from "@/components/booking-form" // Import the new BookingForm component
+import { Card } from "@/components/ui/card"
+export default async function HomePage() {
+  const session = await getServerSession() // Fetch session on the server
+  const user = session?.user || null // Get user object, or null if not logged in
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -71,154 +33,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Quick Booking Form */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-900 flex items-center justify-center px-4">
-        <Card className="w-full max-w-lg bg-gray-800 text-white border-vipo-DEFAULT">
-          <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-bold text-vipo-DEFAULT">Book Your VIP Ride Today</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <form action={formAction} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="pickup-location" className="text-gray-300">
-                  Pickup Location
-                </Label>
-                <Input
-                  id="pickup-location"
-                  name="pickup-location"
-                  placeholder="Enter pickup location (e.g., DFW Airport, 123 Main St)"
-                  required
-                  className="bg-gray-700 border-gray-600 text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dropoff-location" className="text-gray-300">
-                  Drop-off Location
-                </Label>
-                <Input
-                  id="dropoff-location"
-                  name="dropoff-location"
-                  placeholder="Enter drop-off location (e.g., Dallas Love Field, 456 Oak Ave)"
-                  required
-                  className="bg-gray-700 border-gray-600 text-white"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date-time" className="text-gray-300">
-                    Date & Time
-                  </Label>
-                  <Input
-                    id="date-time"
-                    name="date-time"
-                    type="datetime-local"
-                    required
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="passengers" className="text-gray-300">
-                    Number of Passengers
-                  </Label>
-                  <Input
-                    id="passengers"
-                    name="passengers"
-                    type="number"
-                    min="1"
-                    defaultValue="1"
-                    required
-                    className="bg-gray-700 border-gray-600 text-white"
-                  />
-                </div>
-              </div>
-              {/* Separated Contact Info Fields */}
-              <div className="space-y-2">
-                <Label htmlFor="contact-name" className="text-gray-300">
-                  Contact Name
-                </Label>
-                <Input
-                  id="contact-name"
-                  name="contact-name"
-                  type="text"
-                  placeholder="Your Name"
-                  required
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contact-email" className="text-gray-300">
-                  Contact Email
-                </Label>
-                <Input
-                  id="contact-email"
-                  name="contact-email"
-                  type="email"
-                  placeholder="your@email.com"
-                  required
-                  value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contact-phone" className="text-gray-300">
-                  Contact Phone
-                </Label>
-                <Input
-                  id="contact-phone"
-                  name="contact-phone"
-                  type="tel"
-                  placeholder="+1234567890"
-                  required
-                  value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
-                  className="bg-gray-700 border-gray-600 text-white"
-                />
-              </div>
-
-              {/* Payment Method Selection */}
-              <div className="space-y-2">
-                <Label className="text-gray-300">Payment Method</Label>
-                <RadioGroup
-                  defaultValue="card"
-                  value={paymentMethod}
-                  onValueChange={setPaymentMethod}
-                  className="flex gap-4"
-                  name="payment-method" // Name for form data
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="card" id="payment-card" />
-                    <Label htmlFor="payment-card" className="text-gray-300">
-                      Card Payment
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="cash" id="payment-cash" />
-                    <Label htmlFor="payment-cash" className="text-gray-300">
-                      Cash Payment
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg"
-                disabled={isPending}
-              >
-                {isPending ? "Processing..." : "Get Instant Quote / Reserve Now"}
-              </Button>
-            </form>
-            {state?.message && !state.redirectUrl && (
-              <div className={`mt-4 text-center ${state.success ? "text-green-500" : "text-red-500"}`}>
-                {state.message}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+      {/* Quick Booking Form - now a separate client component */}
+      <BookingForm user={user} />
 
       {/* Why Choose VIP4DFW Section */}
       <section className="w-full py-12 md:py-24 lg:py-32 bg-black text-white px-4">
@@ -251,7 +67,7 @@ export default function HomePage() {
 
       {/* Airport Transfers Section */}
       <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-900 text-white px-4">
-        <div className="container mx-auto text-center space-y-8">
+        <div className="container flex flex-col mx-auto text-center space-y-8">
           <h2 className="text-3xl md:text-5xl font-bold text-vipo-DEFAULT">
             ✈️ Premium Airport Transfers to DFW & Dallas Love Field ONLY $85
           </h2>
@@ -268,8 +84,8 @@ export default function HomePage() {
               <Check className="w-6 h-6 text-vipo-DEFAULT" /> On-time guarantee, every time
             </li>
           </ul>
-          <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2 mt-8">
-            <Phone className="w-5 h-5" /> Book Your Airport Transfer Now
+          <Button className="bg-vipo-DEFAULT w-fit self-center hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2 mt-8">
+            <Phone className="w-5 h-5" /> Book <span className="hidden md:flex">Your Airport Transfer</span> Now
           </Button>
         </div>
       </section>
@@ -317,32 +133,49 @@ export default function HomePage() {
               </p>
               <p className="font-semibold text-gray-300">– David M.</p>
             </Card>
+            {/* NEW TESTIMONIALS */}
+            <Card className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
+              <div className="flex justify-center mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-6 h-6 text-vipo-DEFAULT fill-vipo-DEFAULT" />
+                ))}
+              </div>
+              <p className="text-lg italic mb-4">
+                “Always my go-to for DFW airport. Punctual, comfortable, and the drivers are always courteous.”
+              </p>
+              <p className="font-semibold text-gray-300">– Jessica L.</p>
+            </Card>
+            <Card className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
+              <div className="flex justify-center mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-6 h-6 text-vipo-DEFAULT fill-vipo-DEFAULT" />
+                ))}
+              </div>
+              <p className="text-lg italic mb-4">
+                “Used VIP4DFW for a corporate event. The service was impeccable, and the vehicle was spotless.”
+              </p>
+              <p className="font-semibold text-gray-300">– Robert K.</p>
+            </Card>
+            <Card className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
+              <div className="flex justify-center mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="w-6 h-6 text-vipo-DEFAULT fill-vipo-DEFAULT" />
+                ))}
+              </div>
+              <p className="text-lg italic mb-4">
+                “Reliable and luxurious. VIP4DFW makes traveling stress-free. Highly recommend their airport service.”
+              </p>
+              <p className="font-semibold text-gray-300">– Emily R.</p>
+            </Card>
           </div>
           <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
-            ✨ Experience the VIP difference – Book Your Ride Now!
-          </Button>
-        </div>
-      </section>
-
-      {/* About Us Section */}
-      <section className="w-full py-12 md:py-24 lg:py-32 bg-black text-white px-4">
-        <div className="container mx-auto text-center space-y-8">
-          <h2 className="text-3xl md:text-5xl font-bold text-vipo-DEFAULT">
-            Your Trusted VIP Ride in Dallas-Fort Worth
-          </h2>
-          <p className="text-lg md:text-xl text-gray-300 max-w-3xl mx-auto">
-            At VIP4DFW, we believe that every ride should be as enjoyable as the destination. Our mission is to provide
-            safe, on-time, luxury transportation with exceptional service 24/7. Whether it’s an early morning airport
-            transfer or a late-night pickup, we’re always ready to get you there in comfort and style.
-          </p>
-          <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2 mt-8">
-            🚖 Book Your Ride Today
+            <span className="hidden md:flex">✨ Experience the VIP difference – </span>Book Your Ride Now!
           </Button>
         </div>
       </section>
 
       {/* Footer / Contact Section */}
-      <footer className="w-full py-12 md:py-16 bg-gray-900 text-gray-300 px-4">
+      {/* <footer className="w-full py-12 md:py-16 bg-gray-900 text-gray-300 px-4">
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
           <div className="flex items-center gap-3">
             <Phone className="w-6 h-6 text-vipo-DEFAULT" />
@@ -359,7 +192,7 @@ export default function HomePage() {
         <div className="mt-8 text-center text-sm text-gray-500">
           &copy; {new Date().getFullYear()} VIP4DFW. All rights reserved.
         </div>
-      </footer>
+      </footer> */}
     </div>
   )
 }

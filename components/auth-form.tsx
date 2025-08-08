@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { signIn, signUp } from "@/app/auth/actions"
-import Link from "next/link"
+import { signIn } from "next-auth/react" // Import signIn from next-auth/react for client-side use
 
 export default function AuthForm() {
   const [isLogin, setIsLogin] = useState(true)
@@ -25,23 +24,70 @@ export default function AuthForm() {
     setMessageType(null)
 
     const formData = new FormData(event.currentTarget)
+    const email = formData.get("email") as string
+    const password = formData.get("password") as string
+    const name = formData.get("name") as string // Only for signup
+
     let result
 
     if (isLogin) {
-      result = await signIn(formData)
-    } else {
-      result = await signUp(formData)
-    }
+      // Call client-side signIn function
+      result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false, // Important: Handle redirect manually
+      })
 
-    if (result.success) {
-      setMessage(result.message)
-      setMessageType("success")
-      if (isLogin) {
+      if (result?.error) {
+        console.error("Sign in error:", result.error)
+        setMessage("Invalid credentials.")
+        setMessageType("error")
+      } else {
+        setMessage("Signed in successfully! Redirecting...")
+        setMessageType("success")
         router.push("/dashboard") // Redirect on successful login
       }
     } else {
-      setMessage(result.message)
-      setMessageType("error")
+      // For signup, we'll still use a server action to create the user securely
+      // and then use client-side signIn to log them in.
+      try {
+        const response = await fetch("/api/auth/signup", { // Use the dedicated signup API route
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name, email, password }),
+        })
+
+        const data = await response.json()
+
+        if (response.ok) {
+          setMessage(data.message)
+          setMessageType("success")
+          // After successful signup, automatically sign in the user
+          const signInResult = await signIn("credentials", {
+            email,
+            password,
+            redirect: false,
+          })
+
+          if (signInResult?.error) {
+            setMessage(`Signup successful, but failed to auto-login: ${signInResult.error}`)
+            setMessageType("error")
+          } else {
+            setMessage("Account created and signed in successfully! Redirecting...")
+            setMessageType("success")
+            router.push("/dashboard")
+          }
+        } else {
+          setMessage(data.message || "An unknown error occurred during signup.")
+          setMessageType("error")
+        }
+      } catch (error: any) {
+        console.error("Signup fetch error:", error)
+        setMessage(`Network error during signup: ${error.message || "Could not connect to server."}`)
+        setMessageType("error")
+      }
     }
     setIsLoading(false)
   }
@@ -125,9 +171,11 @@ export default function AuthForm() {
         </div>
         {isLogin && (
           <div className="text-center text-sm">
-            <Link href="/forgot-password" className="text-vipo-DEFAULT hover:underline">
+            {/* NextAuth.js handles password resets differently, typically via email links.
+                We'll remove this for now and can re-implement a proper flow later if needed. */}
+            {/* <Link href="/forgot-password" className="text-vipo-DEFAULT hover:underline">
               Forgot your password?
-            </Link>
+            </Link> */}
           </div>
         )}
       </CardContent>

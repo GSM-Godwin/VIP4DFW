@@ -1,0 +1,123 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth.js Models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?   // Updated field for storing hashed password
+  isVerified    Boolean   @default(false) // New field for email verification
+  role          String    @default("user") // New field for user roles (e.g., "user", "admin")
+  accounts      Account[]
+  sessions      Session[]
+  bookings      Booking[] // Link to your existing Booking model
+
+  @@map("users") // Map to 'users' table in database
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Your existing models (if any, ensure they are here)
+model Vehicle {
+  id            String    @id @default(uuid()) @db.Uuid
+  make          String
+  model         String
+  year          Int
+  licensePlate  String    @unique @map("license_plate")
+  capacity      Int
+  status        String?   @default("available")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookings      Booking[]
+
+  @@map("vehicles")
+}
+
+model Driver {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  phone     String    @unique
+  email     String?   @unique
+  status    String?   @default("available")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bookings  Booking[]
+
+  @@map("drivers")
+}
+
+model Booking {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String?   @map("user_id") // Make nullable for guest bookings
+  vehicleId       String?   @map("vehicle_id") @db.Uuid
+  driverId        String?   @map("driver_id") @db.Uuid
+  pickupLocation  String    @map("pickup_location")
+  dropoffLocation String    @map("dropoff_location")
+  pickupTime      DateTime  @map("pickup_time") @db.Timestamptz(6)
+  numPassengers   Int       @map("num_passengers")
+  contactName     String    @map("contact_name")
+  contactEmail    String    @map("contact_email")
+  contactPhone    String    @map("contact_phone")
+  serviceType     String    @map("service_type")
+  flatRateAmount  Decimal?  @map("flat_rate_amount") @db.Decimal(10, 2)
+  hourlyRate      Decimal?  @map("hourly_rate") @db.Decimal(10, 2)
+  totalPrice      Decimal   @map("total_price") @db.Decimal(10, 2)
+  status          String?   @default("pending")
+  paymentStatus   String?   @default("unpaid") @map("payment_status")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  carType         String?   @map("car_type") // Field for chosen car type
+  driverLatitude  Decimal?  @map("driver_latitude") @db.Decimal(10, 7) // NEW: Driver's current latitude
+  driverLongitude Decimal?  @map("driver_longitude") @db.Decimal(10, 7) // NEW: Driver's current longitude
+
+  user    User?    @relation(fields: [userId], references: [id])
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id])
+  driver  Driver?  @relation(fields: [driverId], references: [id])
+
+  @@map("bookings")
+}

@@ -1,112 +1,29 @@
 "use server"
 
-import { createSupabaseServerClient } from "@/lib/supabase/server"
+// Only signOut and auth (for getUser) remain as server-side functions.
+// signIn and signUp logic is now handled by client-side components and API routes.
+import { signOut, auth } from "next-auth" // Import signOut and auth from "next-auth"
 import { redirect } from "next/navigation"
-import { headers } from "next/headers"
+import prisma from "@/lib/prisma" // Import your Prisma client
 
-export async function signUp(formData: FormData) {
-  const origin = (await headers()).get("origin")
-  const email = formData.get("email") as string
-  const password = formData.get("password") as string
-  const name = formData.get("name") as string // UNCOMMENT THIS LINE
-  const supabase = await createSupabaseServerClient()
+// Removed signUp and signInUser functions from here.
+// Their logic is now in components/auth-form.tsx and app/api/auth/signup/route.ts
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${origin}/auth/callback`,
-      data: { name: name }, // UNCOMMENT AND ENSURE THIS LINE IS PRESENT
-    },
-  })
-
-  if (error) {
-    console.error("Sign up error:", error.message)
-    return { success: false, message: error.message }
-  }
-
-  return { success: true, message: "Check your email to confirm your account." }
-}
-
-export async function signIn(formData: FormData) {
-  const email = formData.get("email") as string
-  const password = formData.get("password") as string
-  const supabase = await createSupabaseServerClient()
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) {
-    console.error("Sign in error:", error.message)
-    return { success: false, message: error.message }
-  }
-
-  redirect("/dashboard")
-}
-
-export async function signOut() {
-  const supabase = await createSupabaseServerClient()
-  const { error } = await supabase.auth.signOut()
-
-  if (error) {
-    console.error("Sign out error:", error.message)
-  }
-
+export async function signOutUser() {
+  await signOut({ redirect: false, redirectTo: "/login" }) // Sign out and redirect to login
   redirect("/login")
-}
-
-export async function sendPasswordResetEmail(formData: FormData) {
-  const origin = (await headers()).get("origin")
-  const email = formData.get("email") as string
-  const supabase = await createSupabaseServerClient()
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/update-password`,
-  })
-
-  if (error) {
-    console.error("Password reset email error:", error.message)
-    return { success: false, message: error.message }
-  }
-
-  return { success: true, message: "Check your email for the password reset link." }
-}
-
-export async function updatePassword(formData: FormData) {
-  const password = formData.get("password") as string
-  const supabase = await createSupabaseServerClient()
-
-  const { error } = await supabase.auth.updateUser({
-    password: password,
-  })
-
-  if (error) {
-    console.error("Update password error:", error.message)
-    return { success: false, message: error.message }
-  }
-
-  return { success: true, message: "Your password has been updated successfully. You can now log in." }
 }
 
 // Helper to get the current authenticated user with their profile name
 export async function getUser() {
-  const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (user) {
-    // Fetch profile data from the 'profiles' table
-    const { data: profile, error } = await supabase.from("profiles").select("name").eq("id", user.id).single()
-
-    if (error) {
-      console.error("Error fetching profile:", error.message)
-      // Return user without name if profile fetch fails
-      return { ...user, name: null }
-    }
-    return { ...user, name: profile?.name || null }
+  const session = await auth() // Use the auth helper directly from "next-auth"
+  if (session?.user?.id) {
+    // Fetch full user data from Prisma if needed, including name
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, email: true, name: true }, // Select only necessary fields
+    })
+    return user
   }
   return null
 }

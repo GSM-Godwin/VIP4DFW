@@ -1,0 +1,159 @@
+import { redirect } from "next/navigation"
+import { getServerSession } from "next-auth"
+import { getAdminBookings, updateBookingStatus } from "@/app/bookings/actions"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { format } from "date-fns"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { AdminBookingActions } from "@/components/admin-booking-actions"
+import { AdminLocationTracker } from "@/components/admin-location-tracker" // NEW: Import the location tracker
+
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams: { status?: string }
+}) {
+  const session = await getServerSession();
+
+  // Authorization check: Redirect if not logged in or not an admin
+  // if (!session || (session.user as any).role !== 'admin') {
+  //   redirect("/login?error=unauthorized"); // Redirect to login with an unauthorized error
+  // }
+
+  const filterStatus = searchParams.status as 'all' | 'pending' | 'confirmed' | 'declined' | 'completed' | 'cancelled' | undefined;
+
+  const { bookings, message, success } = await getAdminBookings({ status: filterStatus });
+
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
+      <Card className="w-full max-w-5xl bg-gray-800 text-white border-vipo-DEFAULT mb-8">
+        <CardHeader className="text-center">
+          <CardTitle className="text-3xl font-bold text-vipo-DEFAULT">Admin Dashboard</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-center">
+          {/* <p className="text-lg text-gray-300">Welcome, {session.user.name || session.user.email}!</p> */}
+          <p className="text-xl font-semibold text-vipo-DEFAULT">Manage all VIP4DFW bookings here.</p>
+        </CardContent>
+      </Card>
+
+      <Card className="w-full max-w-5xl bg-gray-800 text-white border-vipo-DEFAULT">
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold text-vipo-DEFAULT">All Bookings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="all" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
+              <TabsTrigger value="all" asChild>
+                <a href="/admin/dashboard">All</a>
+              </TabsTrigger>
+              <TabsTrigger value="pending" asChild>
+                <a href="/admin/dashboard?status=pending">Pending</a>
+              </TabsTrigger>
+              <TabsTrigger value="confirmed" asChild>
+                <a href="/admin/dashboard?status=confirmed">Confirmed</a>
+              </TabsTrigger>
+              <TabsTrigger value="declined" asChild>
+                <a href="/admin/dashboard?status=declined">Declined</a>
+              </TabsTrigger>
+              <TabsTrigger value="completed" asChild>
+                <a href="/admin/dashboard?status=completed">Completed</a>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value={filterStatus || "all"} className="mt-4">
+              {!success && <p className="text-red-500 text-center">{message}</p>}
+              {success && bookings.length === 0 && <p className="text-gray-300 text-center">No bookings found for this filter.</p>}
+              {success && bookings.length > 0 && (
+                <div className="space-y-4">
+                  {bookings.map((booking) => (
+                    <Card key={booking.id} className="bg-gray-700 border-gray-600 p-4">
+                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                        <div className="flex-1">
+                          <p className="text-lg font-semibold text-vipo-DEFAULT">
+                            {booking.pickupLocation} to {booking.dropoffLocation}
+                          </p>
+                          <p className="text-gray-300 text-sm">Booking ID: {booking.id}</p>
+                          <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
+                          <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
+                          <p className="text-gray-300">Car Type: {booking.carType}</p>
+                          <p className="text-gray-300">Contact: {booking.contactName} ({booking.contactEmail}, {booking.contactPhone})</p>
+                          <p className="text-gray-300">Total Price: ${booking.totalPrice.toFixed(2)}</p>
+                          <p className={`font-medium ${
+                            booking.status === "pending" ? "text-yellow-400" :
+                            booking.status === "confirmed" ? "text-green-400" :
+                            "text-red-400"
+                          }`}>
+                            Status: {booking.status}
+                          </p>
+                          <p
+                            className={`font-medium ${
+                              booking.paymentStatus === "unpaid" || booking.paymentStatus === "pending_cash"
+                                ? "text-yellow-400"
+                                : booking.paymentStatus === "paid"
+                                  ? "text-green-400"
+                                  : "text-red-400"
+                            }`}
+                          >
+                            Payment: {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : 'N/A'}
+                          </p>
+                        </div>
+                        <AdminBookingActions bookingId={booking.id} currentStatus={booking.status || 'pending'} />
+                        {/* NEW: Add AdminLocationTracker for confirmed bookings */}
+                        {booking.status === 'confirmed' && (
+                          <AdminLocationTracker
+                            bookingId={booking.id}
+                            initialLatitude={booking.driverLatitude}
+                            initialLongitude={booking.driverLongitude}
+                          />
+                        )}
+                        {/* Optional: Add a view details button with a dialog */}
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black bg-transparent">View Details</Button>
+                          </DialogTrigger>
+                          <DialogContent className="bg-gray-800 text-white border-vipo-DEFAULT">
+                            <DialogHeader>
+                              <DialogTitle className="text-vipo-DEFAULT">Booking Details: {booking.id}</DialogTitle>
+                              <DialogDescription className="text-gray-300">
+                                Full information for this booking.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-2 text-gray-200">
+                              <p><strong>Pickup:</strong> {booking.pickupLocation}</p>
+                              <p><strong>Drop-off:</strong> {booking.dropoffLocation}</p>
+                              <p><strong>Time:</strong> {format(new Date(booking.pickupTime), "PPP p")}</p>
+                              <p><strong>Passengers:</strong> {booking.numPassengers}</p>
+                              <p><strong>Car Type:</strong> {booking.carType}</p>
+                              <p><strong>Service Type:</strong> {booking.serviceType.replace(/_/g, " ")}</p>
+                              <p><strong>Contact Name:</strong> {booking.contactName}</p>
+                              <p><strong>Contact Email:</strong> {booking.contactEmail}</p>
+                              <p><strong>Contact Phone:</strong> {booking.contactPhone}</p>
+                              <p><strong>Total Price:</strong> ${booking.totalPrice.toFixed(2)}</p>
+                              <p><strong>Status:</strong> {booking.status}</p>
+                              <p><strong>Payment Status:</strong> {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : 'N/A'}</p>
+                              <p><strong>Booked At:</strong> {format(new Date(booking.createdAt), "PPP p")}</p>
+                              {booking.driverLatitude && booking.driverLongitude && (
+                                <p><strong>Driver Location:</strong> Lat: {booking.driverLatitude.toFixed(5)}, Lon: {booking.driverLongitude.toFixed(5)}</p>
+                              )}
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

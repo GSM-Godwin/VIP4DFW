@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server"
 import Stripe from "stripe"
-import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache" // Import revalidatePath
+import prisma from "@/lib/prisma" // Import Prisma client
+import { revalidatePath } from "next/cache"
 
 // Initialize Stripe with your secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-07-30.basil",
 })
 
-// IMPORTANT: Remember to uncomment this block after debugging if you removed it.
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//   },
-// }
+// This is important for Next.js to parse the raw body for webhook signature verification
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+}
 
 export async function POST(req: Request) {
   console.error("VIP4DFW_WEBHOOK_DEBUG_START: Function entered.")
@@ -35,8 +35,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 })
   }
 
-  const supabase = await createSupabaseServerClient()
-
   // Handle the event
   switch (event.type) {
     case "checkout.session.completed":
@@ -49,40 +47,33 @@ export async function POST(req: Request) {
       if (bookingId) {
         // --- DIAGNOSTIC STEP: Try to SELECT the booking first without .single() ---
         console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to SELECT booking with ID: ${bookingId} (without .single())`)
-        const { data: existingBookings, error: selectError } = await supabase
-          .from("bookings")
-          .select("*")
-          .eq("id", bookingId)
-        // Removed .single() to see the raw array result
+        const existingBooking = await prisma.booking.findUnique({
+          where: { id: bookingId },
+        })
 
-        if (selectError) {
-          console.error("VIP4DFW_WEBHOOK_DEBUG: Error selecting booking (raw):", selectError.message)
-        } else if (!existingBookings || existingBookings.length === 0) {
+        if (!existingBooking) {
           console.error("VIP4DFW_WEBHOOK_DEBUG: SELECT returned no bookings.")
         } else {
-          console.error(
-            `VIP4DFW_WEBHOOK_DEBUG: SELECT successful. Found ${existingBookings.length} booking(s). First booking:`,
-            existingBookings[0],
-          )
+          console.error(`VIP4DFW_WEBHOOK_DEBUG: SELECT successful. Found booking:`, existingBooking)
         }
         // --- END DIAGNOSTIC STEP ---
 
         console.error(`VIP4DFW_WEBHOOK_DEBUG: Attempting to UPDATE booking ID: ${bookingId}`)
-        const { data, error } = await supabase
-          .from("bookings")
-          .update({ payment_status: "paid" })
-          .eq("id", bookingId)
-          .limit(1) // Add limit(1) as a defensive measure
-          .select() // Add .select() to return the updated data
-
-        if (error) {
-          console.error("VIP4DFW_WEBHOOK_DEBUG: Error updating booking payment status:", error.message)
+        try {
+          const updatedBooking = await prisma.booking.update({
+            where: { id: bookingId },
+            data: { paymentStatus: "paid" },
+          })
+          console.error("VIP4DFW_WEBHOOK_DEBUG: Booking payment status updated to 'paid'.", updatedBooking)
+          revalidatePath("/dashboard")
+          console.error("VIP4DFW_WEBHOOK_DEBUG: Revalidated /dashboard path.")
+        } catch (updateError: any) {
+          console.error(
+            "VIP4DFW_WEBHOOK_DEBUG: Error updating booking payment status with Prisma:",
+            updateError.message,
+          )
           return NextResponse.json({ error: "Failed to update booking status" }, { status: 500 })
         }
-        console.error("VIP4DFW_WEBHOOK_DEBUG: Booking payment status updated to 'paid'.", data)
-
-        revalidatePath("/dashboard")
-        console.error("VIP4DFW_WEBHOOK_DEBUG: Revalidated /dashboard path.")
       } else {
         console.warn("VIP4DFW_WEBHOOK_DEBUG: Checkout session completed, but no booking_id found in metadata.")
       }
@@ -92,5 +83,6 @@ export async function POST(req: Request) {
       console.error(`VIP4DFW_WEBHOOK_DEBUG: Unhandled event type ${event.type}`)
   }
 
+  // Return a 200 response to acknowledge receipt of the event
   return NextResponse.json({ received: true }, { status: 200 })
 }
