@@ -20,6 +20,11 @@ export default async function HomePage() {
           Luxury SUVs • Professional Chauffeurs • 24/7 On-Time Service
         </p>
         <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">flat rate $85</p>
+        <div className="text-lg md:text-xl text-gray-200 max-w-3xl">
+          <p className="font-semibold text-vipo-DEFAULT">Cities included are:</p>
+          <p>Dallas, Richardson, Plano, Allen, Wylie, McKinney, Frisco, Colony, Garland, Rowlett, Rockwall, Irving, Carrollton, Addison, Farmers Branch.</p>
+          <p className="mt-2 text-sm text-gray-400">If your city is NOT mentioned, please contact us for your price.</p>
+        </div>
         <div className="flex flex-col sm:flex-row gap-4 mt-6">
           <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2">
             <Check className="w-5 h-5" /> Book Now

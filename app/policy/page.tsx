@@ -42,6 +42,9 @@ export default function PolicyPage() {
             or unsafe by the chauffeur may result in the termination of service without refund. Smoking and illegal
             activities are strictly prohibited in all vehicles.
           </p>
+          <p className="font-bold text-red-400">
+            Any alcoholic beverage drinks are also prohibited in our vehicles.
+          </p>
         </CardContent>
       </Card>
     </div>

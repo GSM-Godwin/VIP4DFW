@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group" // Keep RadioGroup for car selection
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useActionState, useState, useEffect } from "react"
 import { createBooking } from "@/app/bookings/actions"
 import { useRouter } from "next/navigation"
+import Image from "next/image" // NEW: Import Image component
 
 interface BookingFormProps {
   user: {
@@ -20,7 +21,7 @@ interface BookingFormProps {
 export function BookingForm({ user }: BookingFormProps) {
   const router = useRouter()
   const [state, formAction, isPending] = useActionState(createBooking, { success: false, message: "" })
-  const [selectedCarType, setSelectedCarType] = useState("Escalade"); // Default car type
+  const [selectedCarType, setSelectedCarType] = useState("Any Available"); // Default to "Any Available"
 
   // Handle redirect after action completes
   useEffect(() => {
@@ -132,26 +133,56 @@ export function BookingForm({ user }: BookingFormProps) {
               />
             </div>
 
-            {/* NEW: Car Type Selection */}
+            {/* UPDATED: Car Type Selection with images and "Any Available" option */}
             <div className="space-y-2">
               <Label className="text-gray-300">Choose Your Vehicle</Label>
               <RadioGroup
-                defaultValue="Escalade"
+                defaultValue="Any Available"
                 value={selectedCarType}
                 onValueChange={setSelectedCarType}
                 className="flex flex-col sm:flex-row gap-4"
-                name="car-type" // Name for form data
+                name="car-type"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Escalade" id="car-escalade" />
-                  <Label htmlFor="car-escalade" className="text-gray-300">
-                    Cadillac Escalade
-                  </Label>
+                <div className="gap-4">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="Escalade" id="car-escalade" />
+                    <Label htmlFor="car-escalade" className="text-gray-300 flex items-center gap-2">
+                      <Image
+                        src="/images/cadillac.png"
+                        alt="Cadillac Escalade"
+                        width={80}
+                        height={50}
+                        className="rounded"
+                      />
+                      Cadillac Escalade
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="Suburban" id="car-suburban" />
+                    <Label htmlFor="car-suburban" className="text-gray-300 flex items-center gap-2">
+                      <Image
+                        src="/images/suburban.png"
+                        alt="Chevy Suburban"
+                        width={80}
+                        height={50}
+                        className="rounded"
+                      />
+                      Chevy Suburban
+                    </Label>
+                  </div>
+
                 </div>
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Suburban" id="car-suburban" />
-                  <Label htmlFor="car-suburban" className="text-gray-300">
-                    Chevy Suburban
+                  <RadioGroupItem value="Any Available" id="car-any" />
+                  <Label htmlFor="car-any" className="text-gray-300 flex items-center gap-2">
+                    <Image
+                      src="/images/vip4dfw-logo-orange.png"
+                      alt="Any Available Vehicle"
+                      width={80}
+                      height={50}
+                      className="rounded"
+                    />
+                    Any Available Vehicle
                   </Label>
                 </div>
               </RadioGroup>
