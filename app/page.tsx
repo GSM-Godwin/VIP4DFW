@@ -11,7 +11,7 @@ export default async function HomePage() {
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Hero Section */}
-      <section className="relative w-full py-12 md:py-24 lg:py-32 flex flex-col items-center justify-center text-center px-4 space-y-8">
+      <section className="relative w-full py-3 md:py-6 lg:py-12 flex flex-col items-center justify-center text-center px-4 space-y-8">
         <Image src="/images/vip4dfw-logo-orange.png" alt="VIP4DFW Logo" width={300} height={300} className="mb-8" />
         <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tighter text-vipo-DEFAULT">
           🚖 Your VIP Ride to DFW & Dallas Love Field Starts Here
