@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useActionState, useState, useEffect } from "react"
 import { createBooking } from "@/app/bookings/actions"
 import { useRouter } from "next/navigation"
-import Image from "next/image" // NEW: Import Image component
+import Image from "next/image"
 
 interface BookingFormProps {
   user: {
@@ -21,12 +21,19 @@ interface BookingFormProps {
 export function BookingForm({ user }: BookingFormProps) {
   const router = useRouter()
   const [state, formAction, isPending] = useActionState(createBooking, { success: false, message: "" })
-  const [selectedCarType, setSelectedCarType] = useState("Any Available"); // Default to "Any Available"
+  const [selectedCarType, setSelectedCarType] = useState("Any Available")
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash") // NEW: State for payment method
 
   // Handle redirect after action completes
   useEffect(() => {
     if (state.success && state.redirectUrl) {
-      router.push(state.redirectUrl)
+      // If it's a Stripe checkout URL, redirect directly
+      if (state.redirectUrl.startsWith("http")) {
+        window.location.href = state.redirectUrl
+      } else {
+        // Otherwise, it's an internal Next.js redirect
+        router.push(state.redirectUrl)
+      }
     }
   }, [state, router])
 
@@ -133,7 +140,7 @@ export function BookingForm({ user }: BookingFormProps) {
               />
             </div>
 
-            {/* UPDATED: Car Type Selection with images and "Any Available" option */}
+            {/* Car Type Selection with images and "Any Available" option */}
             <div className="space-y-2">
               <Label className="text-gray-300">Choose Your Vehicle</Label>
               <RadioGroup
@@ -143,34 +150,31 @@ export function BookingForm({ user }: BookingFormProps) {
                 className="flex flex-col sm:flex-row gap-4"
                 name="car-type"
               >
-                <div className="gap-4">
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Escalade" id="car-escalade" />
-                    <Label htmlFor="car-escalade" className="text-gray-300 flex items-center gap-2">
-                      <Image
-                        src="/images/cadillac.png"
-                        alt="Cadillac Escalade"
-                        width={80}
-                        height={50}
-                        className="rounded"
-                      />
-                      Cadillac Escalade
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="Suburban" id="car-suburban" />
-                    <Label htmlFor="car-suburban" className="text-gray-300 flex items-center gap-2">
-                      <Image
-                        src="/images/suburban.png"
-                        alt="Chevy Suburban"
-                        width={80}
-                        height={50}
-                        className="rounded"
-                      />
-                      Chevy Suburban
-                    </Label>
-                  </div>
-
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Escalade" id="car-escalade" />
+                  <Label htmlFor="car-escalade" className="text-gray-300 flex items-center gap-2">
+                    <Image
+                      src="/images/cadillac.png"
+                      alt="Cadillac Escalade"
+                      width={80}
+                      height={50}
+                      className="rounded"
+                    />
+                    Cadillac Escalade
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="Suburban" id="car-suburban" />
+                  <Label htmlFor="car-suburban" className="text-gray-300 flex items-center gap-2">
+                    <Image
+                      src="/images/suburban.png"
+                      alt="Chevy Suburban"
+                      width={80}
+                      height={50}
+                      className="rounded"
+                    />
+                    Chevy Suburban
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="Any Available" id="car-any" />
@@ -188,12 +192,37 @@ export function BookingForm({ user }: BookingFormProps) {
               </RadioGroup>
             </div>
 
+            {/* NEW: Payment Method Selection */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Payment Method</Label>
+              <RadioGroup
+                defaultValue="cash"
+                value={selectedPaymentMethod}
+                onValueChange={setSelectedPaymentMethod}
+                className="flex flex-col sm:flex-row gap-4"
+                name="payment-method"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="cash" id="payment-cash" />
+                  <Label htmlFor="payment-cash" className="text-gray-300">
+                    Cash on Arrival
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="card" id="payment-card" />
+                  <Label htmlFor="payment-card" className="text-gray-300">
+                    Credit Card (Pay Now)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
             <Button
               type="submit"
               className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg"
               disabled={isPending}
             >
-              {isPending ? "Processing..." : "Book Now"}
+              {isPending ? "Processing..." : selectedPaymentMethod === "card" ? "Proceed to Payment" : "Reserve Now"}
             </Button>
           </form>
           {state?.message && !state.redirectUrl && (

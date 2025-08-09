@@ -1,11 +1,14 @@
 "use server"
-
-import { headers } from "next/headers"
 import { format } from "date-fns"
 import prisma from "@/lib/prisma" // Import Prisma client
 import { getServerSession } from "next-auth" // Import getServerSession directly from next-auth
 import { revalidatePath } from "next/cache"
 import { sendEmail } from "@/lib/email" // Import email utility
+import Stripe from "stripe" // NEW: Import Stripe
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2025-07-30.basil", // Use a recent API version
+})
 
 export async function createBooking(
   prevState: { success: boolean; message: string; booking?: any; redirectUrl?: string },
@@ -25,6 +28,7 @@ export async function createBooking(
   const contactEmail = formData.get("contact-email") as string
   const contactPhone = formData.get("contact-phone") as string
   const carType = formData.get("car-type") as string
+  const paymentMethod = formData.get("payment-method") as string // NEW: Get payment method
 
   if (
     !pickupLocation ||
@@ -35,9 +39,10 @@ export async function createBooking(
     !contactName ||
     !contactEmail ||
     !contactPhone ||
-    !carType
+    !carType ||
+    !paymentMethod
   ) {
-    return { success: false, message: "All booking fields and car type are required." }
+    return { success: false, message: "All booking fields, car type, and payment method are required." }
   }
 
   const pickupTime = new Date(pickupTimeStr)
@@ -56,7 +61,7 @@ export async function createBooking(
     (isDFW(pickupLocation) && !isDFW(dropoffLocation)) ||
     (!isDFW(pickupLocation) && isDFW(dropoffLocation)) ||
     (isDAL(pickupLocation) && !isDAL(dropoffLocation)) ||
-    (!isDAL(pickupLocation) && isDAL(dropoffLocation))
+    (isDAL(pickupLocation) && isDAL(dropoffLocation)) // Consider DAL to DAL as airport transfer if needed
 
   if (isAirportTransfer) {
     serviceType = "airport_transfer"
@@ -66,10 +71,12 @@ export async function createBooking(
     totalPrice = 100.0 // Placeholder price for non-airport rides
   }
 
-  const paymentStatus = "pending_cash"
-
   let booking
+  let checkoutSessionUrl: string | null = null
+  const initialPaymentStatus: string = paymentMethod === "cash" ? "pending_cash" : "unpaid" // 'unpaid' for card until webhook confirms
+
   try {
+    // Create booking first, potentially without checkoutSessionId if cash
     booking = await prisma.booking.create({
       data: {
         userId: userId,
@@ -84,14 +91,57 @@ export async function createBooking(
         flatRateAmount: totalPrice,
         totalPrice: totalPrice,
         status: "pending",
-        paymentStatus: paymentStatus,
+        paymentStatus: initialPaymentStatus,
         carType: carType,
       },
     })
 
-    const adminEmail = process.env.ADMIN_EMAIL;
+    if (paymentMethod === "card") {
+      if (!process.env.NEXTAUTH_URL) {
+        throw new Error("NEXTAUTH_URL is not defined in environment variables.")
+      }
+      const successUrl = `${process.env.NEXTAUTH_URL}/booking-success-guest?booking_id=${booking.id}&payment_status=paid`
+      const cancelUrl = `${process.env.NEXTAUTH_URL}/booking-success-guest?booking_id=${booking.id}&payment_status=cancelled`
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: `VIP4DFW Ride: ${pickupLocation} to ${dropoffLocation}`,
+                description: `Booking ID: ${booking.id} - ${carType} for ${numPassengers} passengers on ${format(pickupTime, "PPP p")}`,
+              },
+              unit_amount: Math.round(totalPrice * 100), // Amount in cents
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          bookingId: booking.id, // Pass booking ID to webhook
+        },
+        customer_email: contactEmail, // Pre-fill customer email
+      })
+
+      if (session.url) {
+        checkoutSessionUrl = session.url
+        // Update booking with checkoutSessionId
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: { checkoutSessionId: session.id },
+        })
+      } else {
+        throw new Error("Failed to create Stripe Checkout session URL.")
+      }
+    }
+
+    const adminEmail = process.env.ADMIN_EMAIL
     if (adminEmail) {
-      const adminDashboardUrl = `${process.env.NEXTAUTH_URL}/admin/dashboard?bookingId=${booking.id}`;
+      const adminDashboardUrl = `${process.env.NEXTAUTH_URL}/admin/dashboard?bookingId=${booking.id}`
       const emailHtml = `
         <!DOCTYPE html>
         <html lang="en">
@@ -123,6 +173,8 @@ export async function createBooking(
                     <p class="paragraph"><strong>Pickup Time:</strong> ${format(booking.pickupTime, "PPP p")}</p>
                     <p class="paragraph"><strong>Car Type:</strong> ${booking.carType}</p>
                     <p class="paragraph"><strong>Total Price:</strong> $${booking.totalPrice.toFixed(2)}</p>
+                    <p class="paragraph"><strong>Payment Method:</strong> ${paymentMethod === "cash" ? "Cash on Arrival" : "Credit Card (via Stripe)"}</p>
+                    <p class="paragraph"><strong>Payment Status:</strong> ${initialPaymentStatus}</p>
                 </div>
                 <hr class="hr" />
                 <div class="section">
@@ -144,25 +196,33 @@ export async function createBooking(
             </div>
         </body>
         </html>
-      `;
+      `
       await sendEmail({
         to: adminEmail,
         subject: `New VIP4DFW Booking: ${booking.id}`,
         html: emailHtml,
-      });
+      })
     } else {
-      console.warn("ADMIN_EMAIL environment variable is not set. Admin notification email skipped.");
+      console.warn("ADMIN_EMAIL environment variable is not set. Admin notification email skipped.")
     }
-
   } catch (error: any) {
-    console.error("Error creating booking with Prisma:", error.message)
+    console.error("Error creating booking or Stripe session:", error.message)
     return { success: false, message: `Failed to create booking: ${error.message}` }
   }
 
-  if (!userId) {
-    return { success: true, message: "Booking confirmed! Redirecting to guest success page...", redirectUrl: `/booking-success-guest?booking_id=${booking.id}` }
+  if (checkoutSessionUrl) {
+    return { success: true, message: "Redirecting to payment...", redirectUrl: checkoutSessionUrl }
+  } else {
+    // For cash bookings
+    if (!userId) {
+      return {
+        success: true,
+        message: "Booking confirmed! Redirecting to guest success page...",
+        redirectUrl: `/booking-success-guest?booking_id=${booking.id}&payment_status=pending_cash`,
+      }
+    }
+    return { success: true, message: "Booking confirmed! Cash payment due upon arrival.", booking: booking }
   }
-  return { success: true, message: "Booking confirmed! Cash payment due upon arrival.", booking: booking }
 }
 
 export async function getUserBookings() {
@@ -181,7 +241,7 @@ export async function getUserBookings() {
       orderBy: { pickupTime: "desc" },
     })
 
-    const serializedBookings = bookings.map(booking => ({
+    const serializedBookings = bookings.map((booking) => ({
       ...booking,
       totalPrice: Number(booking.totalPrice),
       flatRateAmount: booking.flatRateAmount ? Number(booking.flatRateAmount) : null,
@@ -198,28 +258,28 @@ export async function getUserBookings() {
 // --- NEW: Admin Booking Actions ---
 
 interface BookingFilter {
-  status?: 'all' | 'pending' | 'confirmed' | 'declined' | 'completed' | 'cancelled';
+  status?: "all" | "pending" | "confirmed" | "declined" | "completed" | "cancelled"
 }
 
 export async function getAdminBookings(filter: BookingFilter = {}) {
-  const session = await getServerSession();
+  const session = await getServerSession()
   // Check if user is admin
-  // if (!session || (session.user as any).role !== 'admin') {
-  //   return { success: false, message: "Unauthorized: You must be an admin to view all bookings.", bookings: [] };
+  // if (!session || (session.user as any).role !== "admin") {
+  //   return { success: false, message: "Unauthorized: You must be an admin to view all bookings.", bookings: [] }
   // }
 
   try {
-    const whereClause: any = {};
-    if (filter.status && filter.status !== 'all') {
-      whereClause.status = filter.status;
+    const whereClause: any = {}
+    if (filter.status && filter.status !== "all") {
+      whereClause.status = filter.status
     }
 
     const bookings = await prisma.booking.findMany({
       where: whereClause,
       orderBy: { createdAt: "desc" }, // Order by creation time for admin view
-    });
+    })
 
-    const serializedBookings = bookings.map(booking => ({
+    const serializedBookings = bookings.map((booking) => ({
       ...booking,
       totalPrice: Number(booking.totalPrice),
       flatRateAmount: booking.flatRateAmount ? Number(booking.flatRateAmount) : null,
@@ -227,34 +287,35 @@ export async function getAdminBookings(filter: BookingFilter = {}) {
       // Ensure driverLatitude and driverLongitude are serialized
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
-    }));
+    }))
 
-    return { success: true, message: "Admin bookings fetched successfully.", bookings: serializedBookings };
+    return { success: true, message: "Admin bookings fetched successfully.", bookings: serializedBookings }
   } catch (error: any) {
-    console.error("Error fetching admin bookings with Prisma:", error.message);
-    return { success: false, message: `Failed to fetch admin bookings: ${error.message}`, bookings: [] };
+    console.error("Error fetching admin bookings with Prisma:", error.message)
+    return { success: false, message: `Failed to fetch admin bookings: ${error.message}`, bookings: [] }
   }
 }
 
-export async function updateBookingStatus(bookingId: string, newStatus: 'confirmed' | 'declined') {
-  const session = await getServerSession();
-  // if (!session || (session.user as any).role !== 'admin') {
-  //   return { success: false, message: "Unauthorized: Only admins can update booking status." };
+export async function updateBookingStatus(bookingId: string, newStatus: "confirmed" | "declined") {
+  const session = await getServerSession()
+  // if (!session || (session.user as any).role !== "admin") {
+  //   return { success: false, message: "Unauthorized: Only admins can update booking status." }
   // }
 
   try {
     const updatedBooking = await prisma.booking.update({
       where: { id: bookingId },
       data: { status: newStatus },
-    });
+    })
 
     // Send email to user based on status
-    const userEmail = updatedBooking.contactEmail;
-    const subject = newStatus === 'confirmed' ? 'Your VIP4DFW Booking is Confirmed!' : 'Update Regarding Your VIP4DFW Booking';
-    let emailHtml = '';
+    const userEmail = updatedBooking.contactEmail
+    const subject =
+      newStatus === "confirmed" ? "Your VIP4DFW Booking is Confirmed!" : "Update Regarding Your VIP4DFW Booking"
+    let emailHtml = ""
 
-    if (newStatus === 'confirmed') {
-      const trackingLink = `${process.env.NEXTAUTH_URL}/track/${bookingId}`;
+    if (newStatus === "confirmed") {
+      const trackingLink = `${process.env.NEXTAUTH_URL}/track/${bookingId}`
       emailHtml = `
           <!DOCTYPE html>
           <html lang="en">
@@ -290,8 +351,8 @@ export async function updateBookingStatus(bookingId: string, newStatus: 'confirm
               </div>
           </body>
           </html>
-        `;
-    } else if (newStatus === 'declined') {
+        `
+    } else if (newStatus === "declined") {
       emailHtml = `
         <!DOCTYPE html>
         <html lang="en">
@@ -323,7 +384,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: 'confirm
             </div>
         </body>
         </html>
-      `;
+      `
     }
 
     if (userEmail && emailHtml) {
@@ -331,27 +392,27 @@ export async function updateBookingStatus(bookingId: string, newStatus: 'confirm
         to: userEmail,
         subject: subject,
         html: emailHtml,
-      });
+      })
     } else {
-      console.warn(`User email or email HTML missing for booking ${bookingId}. User notification skipped.`);
+      console.warn(`User email or email HTML missing for booking ${bookingId}. User notification skipped.`)
     }
 
-    revalidatePath("/admin/dashboard"); // Revalidate admin dashboard to show updated status
-    revalidatePath("/dashboard"); // Revalidate user dashboard if they have this booking
+    revalidatePath("/admin/dashboard") // Revalidate admin dashboard to show updated status
+    revalidatePath("/dashboard") // Revalidate user dashboard if they have this booking
 
-    return { success: true, message: `Booking ${bookingId} status updated to ${newStatus}.` };
+    return { success: true, message: `Booking ${bookingId} status updated to ${newStatus}.` }
   } catch (error: any) {
-    console.error("Error updating booking status:", error.message);
-    return { success: false, message: `Failed to update booking status: ${error.message}` };
+    console.error("Error updating booking status:", error.message)
+    return { success: false, message: `Failed to update booking status: ${error.message}` }
   }
 }
 
 // Server Action to update driver location
 export async function updateDriverLocation(bookingId: string, latitude: number, longitude: number) {
-  const session = await getServerSession();
+  const session = await getServerSession()
   // Ensure only admins can update driver location
-  // if (!session || (session.user as any).role !== 'admin') {
-  //   return { success: false, message: "Unauthorized: Only admins can update driver location." };
+  // if (!session || (session.user as any).role !== "admin") {
+  //   return { success: false, message: "Unauthorized: Only admins can update driver location." }
   // }
 
   try {
@@ -361,12 +422,12 @@ export async function updateDriverLocation(bookingId: string, latitude: number, 
         driverLatitude: latitude,
         driverLongitude: longitude,
       },
-    });
-    revalidatePath(`/track/${bookingId}`); // Revalidate the tracking page to show new location
-    return { success: true, message: "Driver location updated successfully." };
+    })
+    revalidatePath(`/track/${bookingId}`) // Revalidate the tracking page to show new location
+    return { success: true, message: "Driver location updated successfully." }
   } catch (error: any) {
-    console.error("Error updating driver location:", error.message);
-    return { success: false, message: `Failed to update driver location: ${error.message}` };
+    console.error("Error updating driver location:", error.message)
+    return { success: false, message: `Failed to update driver location: ${error.message}` }
   }
 }
 
@@ -375,10 +436,10 @@ export async function getBookingById(bookingId: string) {
   try {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
-    });
+    })
 
     if (!booking) {
-      return { success: false, message: "Booking not found.", booking: null };
+      return { success: false, message: "Booking not found.", booking: null }
     }
 
     // Serialize Decimal types to Number for client-side consumption
@@ -389,11 +450,27 @@ export async function getBookingById(bookingId: string) {
       hourlyRate: booking.hourlyRate ? Number(booking.hourlyRate) : null,
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
-    };
+    }
 
-    return { success: true, message: "Booking fetched successfully.", booking: serializedBooking };
+    return { success: true, message: "Booking fetched successfully.", booking: serializedBooking }
   } catch (error: any) {
-    console.error("Error fetching single booking:", error.message);
-    return { success: false, message: `Failed to fetch booking: ${error.message}`, booking: null };
+    console.error("Error fetching single booking:", error.message)
+    return { success: false, message: `Failed to fetch booking: ${error.message}`, booking: null }
+  }
+}
+
+// NEW: Server Action to update booking payment status (for webhooks)
+export async function updateBookingPaymentStatus(checkoutSessionId: string, newPaymentStatus: string) {
+  try {
+    const booking = await prisma.booking.update({
+      where: { checkoutSessionId: checkoutSessionId },
+      data: { paymentStatus: newPaymentStatus },
+    })
+    revalidatePath("/admin/dashboard") // Revalidate admin dashboard
+    revalidatePath("/dashboard") // Revalidate user dashboard
+    return { success: true, message: `Booking ${booking.id} payment status updated to ${newPaymentStatus}.` }
+  } catch (error: any) {
+    console.error("Error updating booking payment status via webhook:", error.message)
+    return { success: false, message: `Failed to update payment status: ${error.message}` }
   }
 }
