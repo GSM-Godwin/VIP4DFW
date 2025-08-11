@@ -111,7 +111,7 @@ export default async function AdminDashboardPage({
                                 : booking.status === "confirmed"
                                   ? "text-green-400"
                                   : booking.status === "completed"
-                                    ? "text-blue-400" // NEW: Color for completed
+                                    ? "text-blue-400"
                                     : "text-red-400"
                             }`}
                           >
@@ -126,12 +126,20 @@ export default async function AdminDashboardPage({
                                   : "text-red-400"
                             }`}
                           >
-                            Payment: {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"}
+                            Payment: {(() => {
+                              if (booking.paymentStatus === "pending_cash") {
+                                return "Cash on Arrival"
+                              }
+                              if (booking.paymentStatus === "paid") {
+                                return "Credit Card (Paid)"
+                              }
+                              return booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"
+                            })()}
                           </p>
-                          {booking.cancellationReason && (
+                          {booking.cancellationReason && ( // NEW: Display cancellation reason
                             <p className="text-red-300 text-sm">Cancellation Reason: {booking.cancellationReason}</p>
                           )}
-                          {booking.reviewRating !== null && (
+                          {booking.reviewRating !== null && ( // NEW: Display review
                             <div className="flex items-center gap-1 text-gray-300 text-sm">
                               Review:
                               {[...Array(5)].map((_, i) => (
@@ -211,8 +219,15 @@ export default async function AdminDashboardPage({
                                 <strong>Status:</strong> {booking.status}
                               </p>
                               <p>
-                                <strong>Payment Status:</strong>{" "}
-                                {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"}
+                                <strong>Payment Status:</strong> {(() => {
+                                  if (booking.paymentStatus === "pending_cash") {
+                                    return "Cash on Arrival"
+                                  }
+                                  if (booking.paymentStatus === "paid") {
+                                    return "Credit Card (Paid)"
+                                  }
+                                  return booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"
+                                })()}
                               </p>
                               {booking.cancellationReason && (
                                 <p>
