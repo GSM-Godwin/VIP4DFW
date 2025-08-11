@@ -111,10 +111,13 @@ model Booking {
   paymentStatus     String?   @default("unpaid") @map("payment_status")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  carType           String?   @map("car_type") // Field for chosen car type
   driverLatitude    Decimal?  @map("driver_latitude") @db.Decimal(10, 7) // NEW: Driver's current latitude
   driverLongitude   Decimal?  @map("driver_longitude") @db.Decimal(10, 7) // NEW: Driver's current longitude
   checkoutSessionId String?   @unique @map("checkout_session_id") // NEW: For Stripe Checkout
+  customMessage     String?   @map("custom_message") // NEW: For custom messages from client
+  cancellationReason String?   @map("cancellation_reason") // NEW: Reason for cancellation
+  reviewRating       Int?      @map("review_rating") // NEW: Client's review rating (1-5 stars)
+  reviewMessage      String?   @map("review_message") // NEW: Client's review message
 
   user    User?    @relation(fields: [userId], references: [id])
   vehicle Vehicle? @relation(fields: [vehicleId], references: [id])

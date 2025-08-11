@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Textarea } from "@/components/ui/textarea" // NEW: Import Textarea
 import { useActionState, useState, useEffect } from "react"
 import { createBooking } from "@/app/bookings/actions"
 import { useRouter } from "next/navigation"
@@ -21,8 +22,7 @@ interface BookingFormProps {
 export function BookingForm({ user }: BookingFormProps) {
   const router = useRouter()
   const [state, formAction, isPending] = useActionState(createBooking, { success: false, message: "" })
-  const [selectedCarType, setSelectedCarType] = useState("Any Available")
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash") // NEW: State for payment method
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash")
 
   // Handle redirect after action completes
   useEffect(() => {
@@ -38,7 +38,35 @@ export function BookingForm({ user }: BookingFormProps) {
   }, [state, router])
 
   return (
-    <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-900 flex items-center justify-center px-4">
+    <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-900 flex flex-col items-center justify-center px-4">
+      {/* NEW: Display cars visually above the form */}
+      <div className="mb-8 text-center">
+        <h2 className="text-3xl md:text-4xl font-bold text-vipo-DEFAULT mb-6">Our Luxury Fleet</h2>
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-8">
+          <div className="flex flex-col items-center">
+            <Image
+              src="/images/cadillac.png"
+              alt="2019 Cadillac Escalade"
+              width={200}
+              height={120}
+              className="rounded-lg shadow-lg mb-2"
+            />
+            <p className="text-lg font-semibold text-gray-200">2019 Cadillac Escalade</p>
+          </div>
+          <div className="flex flex-col items-center">
+            <Image
+              src="/images/suburban.png"
+              alt="2020 Chevy Suburban"
+              width={200}
+              height={120}
+              className="rounded-lg shadow-lg mb-2 mt-2"
+            />
+            <p className="text-lg font-semibold text-gray-200">2020 Chevy Suburban</p>
+          </div>
+        </div>
+        <p className="text-md text-gray-400 mt-4">We will assign an available luxury SUV for your trip.</p>
+      </div>
+
       <Card className="w-full max-w-lg bg-gray-800 text-white border-vipo-DEFAULT">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold text-vipo-DEFAULT">Book Your VIP Ride Today</CardTitle>
@@ -140,59 +168,21 @@ export function BookingForm({ user }: BookingFormProps) {
               />
             </div>
 
-            {/* Car Type Selection with images and "Any Available" option */}
+            {/* NEW: Custom Message Textarea */}
             <div className="space-y-2">
-              <Label className="text-gray-300">Choose Your Vehicle</Label>
-              <RadioGroup
-                defaultValue="Any Available"
-                value={selectedCarType}
-                onValueChange={setSelectedCarType}
-                className="flex flex-col sm:flex-row gap-4"
-                name="car-type"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Escalade" id="car-escalade" />
-                  <Label htmlFor="car-escalade" className="text-gray-300 flex items-center gap-2">
-                    <Image
-                      src="/images/cadillac.png"
-                      alt="Cadillac Escalade"
-                      width={80}
-                      height={50}
-                      className="rounded"
-                    />
-                    Cadillac Escalade
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Suburban" id="car-suburban" />
-                  <Label htmlFor="car-suburban" className="text-gray-300 flex items-center gap-2">
-                    <Image
-                      src="/images/suburban.png"
-                      alt="Chevy Suburban"
-                      width={80}
-                      height={50}
-                      className="rounded"
-                    />
-                    Chevy Suburban
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="Any Available" id="car-any" />
-                  <Label htmlFor="car-any" className="text-gray-300 flex items-center gap-2">
-                    <Image
-                      src="/images/vip4dfw-logo-orange.png"
-                      alt="Any Available Vehicle"
-                      width={80}
-                      height={50}
-                      className="rounded"
-                    />
-                    Any Available Vehicle
-                  </Label>
-                </div>
-              </RadioGroup>
+              <Label htmlFor="custom-message" className="text-gray-300">
+                Special Message / Notes (Optional)
+              </Label>
+              <Textarea
+                id="custom-message"
+                name="custom-message"
+                placeholder="e.g., 'Need a child seat', 'Flight number AA123', 'Picking up a guest'"
+                rows={3}
+                className="bg-gray-700 border-gray-600 text-white"
+              />
             </div>
 
-            {/* NEW: Payment Method Selection */}
+            {/* Payment Method Selection */}
             <div className="space-y-2">
               <Label className="text-gray-300">Payment Method</Label>
               <RadioGroup
@@ -205,7 +195,7 @@ export function BookingForm({ user }: BookingFormProps) {
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="cash" id="payment-cash" />
                   <Label htmlFor="payment-cash" className="text-gray-300">
-                    Cash on Arrival
+                    Cash or Card on Arrival
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">

@@ -27,8 +27,8 @@ export async function createBooking(
   const contactName = formData.get("contact-name") as string
   const contactEmail = formData.get("contact-email") as string
   const contactPhone = formData.get("contact-phone") as string
-  const carType = formData.get("car-type") as string
-  const paymentMethod = formData.get("payment-method") as string // NEW: Get payment method
+  const paymentMethod = formData.get("payment-method") as string
+  const customMessage = formData.get("custom-message") as string // NEW: Get custom message
 
   if (
     !pickupLocation ||
@@ -39,10 +39,9 @@ export async function createBooking(
     !contactName ||
     !contactEmail ||
     !contactPhone ||
-    !carType ||
     !paymentMethod
   ) {
-    return { success: false, message: "All booking fields, car type, and payment method are required." }
+    return { success: false, message: "All required booking fields and payment method are required." }
   }
 
   const pickupTime = new Date(pickupTimeStr)
@@ -92,7 +91,7 @@ export async function createBooking(
         totalPrice: totalPrice,
         status: "pending",
         paymentStatus: initialPaymentStatus,
-        carType: carType,
+        customMessage: customMessage || null, // Save custom message
       },
     })
 
@@ -111,7 +110,7 @@ export async function createBooking(
               currency: "usd",
               product_data: {
                 name: `VIP4DFW Ride: ${pickupLocation} to ${dropoffLocation}`,
-                description: `Booking ID: ${booking.id} - ${carType} for ${numPassengers} passengers on ${format(pickupTime, "PPP p")}`,
+                description: `Booking ID: ${booking.id} - for ${numPassengers} passengers on ${format(pickupTime, "PPP p")}`,
               },
               unit_amount: Math.round(totalPrice * 100), // Amount in cents
             },
@@ -171,10 +170,10 @@ export async function createBooking(
                     <p class="paragraph"><strong>Pickup:</strong> ${booking.pickupLocation}</p>
                     <p class="paragraph"><strong>Drop-off:</strong> ${booking.dropoffLocation}</p>
                     <p class="paragraph"><strong>Pickup Time:</strong> ${format(booking.pickupTime, "PPP p")}</p>
-                    <p class="paragraph"><strong>Car Type:</strong> ${booking.carType}</p>
                     <p class="paragraph"><strong>Total Price:</strong> $${booking.totalPrice.toFixed(2)}</p>
-                    <p class="paragraph"><strong>Payment Method:</strong> ${paymentMethod === "cash" ? "Cash on Arrival" : "Credit Card (via Stripe)"}</p>
+                    <p class="paragraph"><strong>Payment Method:</strong> ${paymentMethod === "cash" ? "Cash or Card on Arrival" : "Credit Card (via Stripe)"}</p>
                     <p class="paragraph"><strong>Payment Status:</strong> ${initialPaymentStatus}</p>
+                    ${booking.customMessage ? `<p class="paragraph"><strong>Custom Message:</strong> ${booking.customMessage}</p>` : ""}
                 </div>
                 <hr class="hr" />
                 <div class="section">
@@ -287,6 +286,7 @@ export async function getAdminBookings(filter: BookingFilter = {}) {
       // Ensure driverLatitude and driverLongitude are serialized
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
+      reviewRating: booking.reviewRating ? Number(booking.reviewRating) : null, // NEW: Serialize reviewRating
     }))
 
     return { success: true, message: "Admin bookings fetched successfully.", bookings: serializedBookings }
@@ -296,25 +296,34 @@ export async function getAdminBookings(filter: BookingFilter = {}) {
   }
 }
 
-export async function updateBookingStatus(bookingId: string, newStatus: "confirmed" | "declined") {
+export async function updateBookingStatus(
+  bookingId: string,
+  newStatus: "confirmed" | "declined" | "cancelled", // Updated type
+  cancellationReason?: string, // New optional parameter
+) {
   const session = await getServerSession()
   // if (!session || (session.user as any).role !== "admin") {
   //   return { success: false, message: "Unauthorized: Only admins can update booking status." }
   // }
 
   try {
+    const updateData: any = { status: newStatus }
+    if (newStatus === "cancelled") {
+      updateData.cancellationReason = cancellationReason || "No reason provided."
+    }
+
     const updatedBooking = await prisma.booking.update({
       where: { id: bookingId },
-      data: { status: newStatus },
+      data: updateData,
     })
 
     // Send email to user based on status
     const userEmail = updatedBooking.contactEmail
-    const subject =
-      newStatus === "confirmed" ? "Your VIP4DFW Booking is Confirmed!" : "Update Regarding Your VIP4DFW Booking"
+    let subject = ""
     let emailHtml = ""
 
     if (newStatus === "confirmed") {
+      subject = "Your VIP4DFW Booking is Confirmed!"
       const trackingLink = `${process.env.NEXTAUTH_URL}/track/${bookingId}`
       emailHtml = `
           <!DOCTYPE html>
@@ -338,8 +347,8 @@ export async function updateBookingStatus(bookingId: string, newStatus: "confirm
                   <h1 class="header">Your Booking is Confirmed!</h1>
                   <p class="paragraph">Dear ${updatedBooking.contactName},</p>
                   <p class="paragraph">Good news! Your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${format(updatedBooking.pickupTime, "PPP p")}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been confirmed.</p>
-                  <p class="paragraph">Your chosen vehicle is a <strong>${updatedBooking.carType}</strong>.</p>
                   <p class="paragraph">The total price for your trip is: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
+                  ${updatedBooking.customMessage ? `<p class="paragraph"><strong>Your Message:</strong> ${updatedBooking.customMessage}</p>` : ""}
                   <p class="paragraph">You can track your driver's live location once the trip begins:</p>
                   <a href="${trackingLink}" class="button">
                       Track Your Ride
@@ -353,6 +362,7 @@ export async function updateBookingStatus(bookingId: string, newStatus: "confirm
           </html>
         `
     } else if (newStatus === "declined") {
+      subject = "Update Regarding Your VIP4DFW Booking"
       emailHtml = `
         <!DOCTYPE html>
         <html lang="en">
@@ -376,8 +386,43 @@ export async function updateBookingStatus(bookingId: string, newStatus: "confirm
                 <p class="paragraph">Dear ${updatedBooking.contactName},</p>
                 <p class="paragraph">We regret to inform you that your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${format(updatedBooking.pickupTime, "PPP p")}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been declined.</p>
                 <p class="paragraph">The total price for your trip was: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
+                ${updatedBooking.customMessage ? `<p class="paragraph"><strong>Your Message:</strong> ${updatedBooking.customMessage}</p>` : ""}
                 <p class="paragraph">This may be due to unavailability of vehicles or drivers at the requested time. We apologize for any inconvenience this may cause.</p>
                 <p class="paragraph">Please feel free to contact us if you have any questions or would like to try booking for a different time.</p>
+                <p class="paragraph">
+                    Thank you,<br />The VIP4DFW Team
+                </p>
+            </div>
+        </body>
+        </html>
+      `
+    } else if (newStatus === "cancelled") {
+      subject = "Your VIP4DFW Booking Has Been Cancelled"
+      emailHtml = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Your VIP4DFW Booking Has Been Cancelled</title>
+            <style>
+                body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
+                .container { background-color: #ffffff; margin: 0 auto; padding: 20px 0 48px; margin-bottom: 64px; max-width: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                .header { color: #ff8c00; font-size: 28px; font-weight: bold; text-align: center; margin: 30px 0; }
+                .paragraph { color: #525f7f; font-size: 16px; line-height: 24px; text-align: left; padding: 0 30px; }
+                .button { background-color: #ff8c00; border-radius: 5px; color: #000; font-size: 16px; font-weight: bold; text-decoration: none; text-align: center; display: block; width: 210px; padding: 14px 7px; margin: 20px auto; }
+                .hr { border-color: #e6ebf1; margin: 20px 0; }
+                .section { padding: 0 30px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 class="header">Your VIP4DFW Booking Has Been Cancelled</h1>
+                <p class="paragraph">Dear ${updatedBooking.contactName},</p>
+                <p class="paragraph">We regret to inform you that your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${format(updatedBooking.pickupTime, "PPP p")}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been cancelled.</p>
+                ${updatedBooking.cancellationReason ? `<p class="paragraph"><strong>Reason for cancellation:</strong> ${updatedBooking.cancellationReason}</p>` : ""}
+                <p class="paragraph">The total price for your trip was: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
+                <p class="paragraph">We apologize for any inconvenience this may cause. Please feel free to contact us if you have any questions or would like to re-book.</p>
                 <p class="paragraph">
                     Thank you,<br />The VIP4DFW Team
                 </p>
@@ -450,6 +495,7 @@ export async function getBookingById(bookingId: string) {
       hourlyRate: booking.hourlyRate ? Number(booking.hourlyRate) : null,
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
+      reviewRating: booking.reviewRating ? Number(booking.reviewRating) : null, // NEW: Serialize reviewRating
     }
 
     return { success: true, message: "Booking fetched successfully.", booking: serializedBooking }
@@ -472,5 +518,124 @@ export async function updateBookingPaymentStatus(checkoutSessionId: string, newP
   } catch (error: any) {
     console.error("Error updating booking payment status via webhook:", error.message)
     return { success: false, message: `Failed to update payment status: ${error.message}` }
+  }
+}
+
+// NEW: Server Action to end a trip and send an invoice
+export async function endTrip(bookingId: string) {
+  const session = await getServerSession()
+  // if (!session || (session.user as any).role !== "admin") {
+  //   return { success: false, message: "Unauthorized: Only admins can end a trip." }
+  // }
+
+  try {
+    const booking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: "completed" },
+    })
+
+    // Send invoice/receipt email
+    const userEmail = booking.contactEmail
+    const reviewLink = `${process.env.NEXTAUTH_URL}/track/${booking.id}` // Link to tracking page for review
+
+    if (userEmail) {
+      const emailHtml = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Your VIP4DFW Trip Receipt!</title>
+            <style>
+                body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
+                .container { background-color: #ffffff; margin: 0 auto; padding: 20px 0 48px; margin-bottom: 64px; max-width: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                .header { color: #ff8c00; font-size: 28px; font-weight: bold; text-align: center; margin: 30px 0; }
+                .paragraph { color: #525f7f; font-size: 16px; line-height: 24px; text-align: left; padding: 0 30px; }
+                .heading { color: #333; font-size: 18px; font-weight: bold; margin-bottom: 10px; padding: 0 30px; }
+                .button { background-color: #ff8c00; border-radius: 5px; color: #000; font-size: 16px; font-weight: bold; text-decoration: none; text-align: center; display: block; width: 210px; padding: 14px 7px; margin: 20px auto; }
+                .hr { border-color: #e6ebf1; margin: 20px 0; }
+                .section { padding: 0 30px; }
+                .invoice-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                .invoice-table th, .invoice-table td { border: 1px solid #e6ebf1; padding: 10px; text-align: left; }
+                .invoice-table th { background-color: #f0f2f5; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 class="header">Your VIP4DFW Trip Receipt!</h1>
+                <p class="paragraph">Dear ${booking.contactName},</p>
+                <p class="paragraph">Thank you for choosing VIP4DFW for your recent trip. We hope you had a comfortable and safe journey!</p>
+                <hr class="hr" />
+                <div class="section">
+                    <p class="heading">Trip Details:</p>
+                    <table class="invoice-table">
+                        <tr><th>Booking ID</th><td>${booking.id}</td></tr>
+                        <tr><th>Service Type</th><td>${booking.serviceType.replace(/_/g, " ")}</td></tr>
+                        <tr><th>Pickup Location</th><td>${booking.pickupLocation}</td></tr>
+                        <tr><th>Drop-off Location</th><td>${booking.dropoffLocation}</td></tr>
+                        <tr><th>Pickup Time</th><td>${format(booking.pickupTime, "PPP p")}</td></tr>
+                        <tr><th>Passengers</th><td>${booking.numPassengers}</td></tr>
+                        <tr><th>Total Price</th><td>$${booking.totalPrice.toFixed(2)}</td></tr>
+                        <tr><th>Payment Status</th><td>${booking.paymentStatus?.replace(/_/g, " ") || "N/A"}</td></tr>
+                        ${booking.customMessage ? `<tr><th>Your Message</th><td>${booking.customMessage}</td></tr>` : ""}
+                    </table>
+                </div>
+                <hr class="hr" />
+                <p class="paragraph">
+                    We value your feedback! Please take a moment to leave a review for your recent trip:
+                </p>
+                <a href="${reviewLink}" class="button">
+                    Leave a Review
+                </a>
+                <p class="paragraph">
+                    Thank you again for your business. We look forward to serving you again soon!
+                    <br />The VIP4DFW Team
+                </p>
+            </div>
+        </body>
+        </html>
+      `
+      await sendEmail({
+        to: userEmail,
+        subject: `Your VIP4DFW Trip Receipt for Booking ${booking.id}`,
+        html: emailHtml,
+      })
+    } else {
+      console.warn(`User email missing for booking ${bookingId}. Invoice email skipped.`)
+    }
+
+    revalidatePath("/admin/dashboard")
+    revalidatePath(`/track/${bookingId}`) // Revalidate tracking page to show review prompt
+    return { success: true, message: `Booking ${bookingId} marked as completed and invoice sent.` }
+  } catch (error: any) {
+    console.error("Error ending trip:", error.message)
+    return { success: false, message: `Failed to end trip: ${error.message}` }
+  }
+}
+
+// NEW: Server Action to submit a review
+export async function submitReview(bookingId: string, rating: number, message: string) {
+  // Note: For a production app, you might want to add more robust authorization here,
+  // e.g., checking if the user submitting the review is the actual client for this booking.
+  // For now, we'll rely on the link being unique to the booking.
+
+  if (rating < 1 || rating > 5) {
+    return { success: false, message: "Rating must be between 1 and 5 stars." }
+  }
+
+  try {
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        reviewRating: rating,
+        reviewMessage: message,
+      },
+    })
+    revalidatePath(`/track/${bookingId}`) // Revalidate tracking page to show submitted review
+    revalidatePath("/admin/dashboard") // Revalidate admin dashboard to show new review
+    return { success: true, message: "Review submitted successfully!" }
+  } catch (error: any) {
+    console.error("Error submitting review:", error.message)
+    return { success: false, message: `Failed to submit review: ${error.message}` }
   }
 }

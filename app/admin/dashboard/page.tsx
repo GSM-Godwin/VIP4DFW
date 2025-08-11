@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { getAdminBookings, updateBookingStatus } from "@/app/bookings/actions"
+import { getAdminBookings } from "@/app/bookings/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
@@ -14,23 +14,31 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { AdminBookingActions } from "@/components/admin-booking-actions"
-import { AdminLocationTracker } from "@/components/admin-location-tracker" // NEW: Import the location tracker
+import { AdminLocationTracker } from "@/components/admin-location-tracker"
+import { Star } from "lucide-react" // NEW: Import Star icon
 
 export default async function AdminDashboardPage({
   searchParams,
 }: {
   searchParams: { status?: string }
 }) {
-  const session = await getServerSession();
+  const session = await getServerSession()
 
   // Authorization check: Redirect if not logged in or not an admin
-  // if (!session || (session.user as any).role !== 'admin') {
-  //   redirect("/login?error=unauthorized"); // Redirect to login with an unauthorized error
+  // if (!session || (session.user as any).role !== "admin") {
+  //   redirect("/login?error=unauthorized") // Redirect to login with an unauthorized error
   // }
 
-  const filterStatus = searchParams.status as 'all' | 'pending' | 'confirmed' | 'declined' | 'completed' | 'cancelled' | undefined;
+  const filterStatus = searchParams.status as
+    | "all"
+    | "pending"
+    | "confirmed"
+    | "declined"
+    | "completed"
+    | "cancelled"
+    | undefined
 
-  const { bookings, message, success } = await getAdminBookings({ status: filterStatus });
+  const { bookings, message, success } = await getAdminBookings({ status: filterStatus })
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
@@ -66,10 +74,17 @@ export default async function AdminDashboardPage({
               <TabsTrigger value="completed" asChild>
                 <a href="/admin/dashboard?status=completed">Completed</a>
               </TabsTrigger>
+              <TabsTrigger value="cancelled">
+                {" "}
+                {/* NEW: Cancelled tab */}
+                <a href="/admin/dashboard?status=cancelled">Cancelled</a>
+              </TabsTrigger>
             </TabsList>
             <TabsContent value={filterStatus || "all"} className="mt-4">
               {!success && <p className="text-red-500 text-center">{message}</p>}
-              {success && bookings.length === 0 && <p className="text-gray-300 text-center">No bookings found for this filter.</p>}
+              {success && bookings.length === 0 && (
+                <p className="text-gray-300 text-center">No bookings found for this filter.</p>
+              )}
               {success && bookings.length > 0 && (
                 <div className="space-y-4">
                   {bookings.map((booking) => (
@@ -82,14 +97,24 @@ export default async function AdminDashboardPage({
                           <p className="text-gray-300 text-sm">Booking ID: {booking.id}</p>
                           <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
                           <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
-                          <p className="text-gray-300">Car Type: {booking.carType}</p>
-                          <p className="text-gray-300">Contact: {booking.contactName} ({booking.contactEmail}, {booking.contactPhone})</p>
+                          <p className="text-gray-300">
+                            Contact: {booking.contactName} ({booking.contactEmail}, {booking.contactPhone})
+                          </p>
                           <p className="text-gray-300">Total Price: ${booking.totalPrice.toFixed(2)}</p>
-                          <p className={`font-medium ${
-                            booking.status === "pending" ? "text-yellow-400" :
-                            booking.status === "confirmed" ? "text-green-400" :
-                            "text-red-400"
-                          }`}>
+                          {booking.customMessage && (
+                            <p className="text-gray-300 text-sm">Notes: {booking.customMessage}</p>
+                          )}
+                          <p
+                            className={`font-medium ${
+                              booking.status === "pending"
+                                ? "text-yellow-400"
+                                : booking.status === "confirmed"
+                                  ? "text-green-400"
+                                  : booking.status === "completed"
+                                    ? "text-blue-400" // NEW: Color for completed
+                                    : "text-red-400"
+                            }`}
+                          >
                             Status: {booking.status}
                           </p>
                           <p
@@ -101,12 +126,31 @@ export default async function AdminDashboardPage({
                                   : "text-red-400"
                             }`}
                           >
-                            Payment: {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : 'N/A'}
+                            Payment: {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"}
                           </p>
+                          {booking.cancellationReason && (
+                            <p className="text-red-300 text-sm">Cancellation Reason: {booking.cancellationReason}</p>
+                          )}
+                          {booking.reviewRating !== null && (
+                            <div className="flex items-center gap-1 text-gray-300 text-sm">
+                              Review:
+                              {[...Array(5)].map((_, i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-4 h-4 ${
+                                    (booking.reviewRating || 0) > i
+                                      ? "text-vipo-DEFAULT fill-vipo-DEFAULT"
+                                      : "text-gray-400"
+                                  }`}
+                                />
+                              ))}
+                              {booking.reviewMessage && <span className="ml-2 italic">"{booking.reviewMessage}"</span>}
+                            </div>
+                          )}
                         </div>
-                        <AdminBookingActions bookingId={booking.id} currentStatus={booking.status || 'pending'} />
-                        {/* NEW: Add AdminLocationTracker for confirmed bookings */}
-                        {booking.status === 'confirmed' && (
+                        <AdminBookingActions bookingId={booking.id} currentStatus={booking.status || "pending"} />
+                        {/* AdminLocationTracker only for confirmed bookings */}
+                        {booking.status === "confirmed" && (
                           <AdminLocationTracker
                             bookingId={booking.id}
                             initialLatitude={booking.driverLatitude}
@@ -116,7 +160,12 @@ export default async function AdminDashboardPage({
                         {/* Optional: Add a view details button with a dialog */}
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black bg-transparent">View Details</Button>
+                            <Button
+                              variant="outline"
+                              className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black bg-transparent"
+                            >
+                              View Details
+                            </Button>
                           </DialogTrigger>
                           <DialogContent className="bg-gray-800 text-white border-vipo-DEFAULT">
                             <DialogHeader>
@@ -126,21 +175,64 @@ export default async function AdminDashboardPage({
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-2 text-gray-200">
-                              <p><strong>Pickup:</strong> {booking.pickupLocation}</p>
-                              <p><strong>Drop-off:</strong> {booking.dropoffLocation}</p>
-                              <p><strong>Time:</strong> {format(new Date(booking.pickupTime), "PPP p")}</p>
-                              <p><strong>Passengers:</strong> {booking.numPassengers}</p>
-                              <p><strong>Car Type:</strong> {booking.carType}</p>
-                              <p><strong>Service Type:</strong> {booking.serviceType.replace(/_/g, " ")}</p>
-                              <p><strong>Contact Name:</strong> {booking.contactName}</p>
-                              <p><strong>Contact Email:</strong> {booking.contactEmail}</p>
-                              <p><strong>Contact Phone:</strong> {booking.contactPhone}</p>
-                              <p><strong>Total Price:</strong> ${booking.totalPrice.toFixed(2)}</p>
-                              <p><strong>Status:</strong> {booking.status}</p>
-                              <p><strong>Payment Status:</strong> {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : 'N/A'}</p>
-                              <p><strong>Booked At:</strong> {format(new Date(booking.createdAt), "PPP p")}</p>
+                              <p>
+                                <strong>Pickup:</strong> {booking.pickupLocation}
+                              </p>
+                              <p>
+                                <strong>Drop-off:</strong> {booking.dropoffLocation}
+                              </p>
+                              <p>
+                                <strong>Time:</strong> {format(new Date(booking.pickupTime), "PPP p")}
+                              </p>
+                              <p>
+                                <strong>Passengers:</strong> {booking.numPassengers}
+                              </p>
+                              <p>
+                                <strong>Service Type:</strong> {booking.serviceType.replace(/_/g, " ")}
+                              </p>
+                              <p>
+                                <strong>Contact Name:</strong> {booking.contactName}
+                              </p>
+                              <p>
+                                <strong>Contact Email:</strong> {booking.contactEmail}
+                              </p>
+                              <p>
+                                <strong>Contact Phone:</strong> {booking.contactPhone}
+                              </p>
+                              <p>
+                                <strong>Total Price:</strong> ${booking.totalPrice.toFixed(2)}
+                              </p>
+                              {booking.customMessage && (
+                                <p>
+                                  <strong>Custom Message:</strong> {booking.customMessage}
+                                </p>
+                              )}
+                              <p>
+                                <strong>Status:</strong> {booking.status}
+                              </p>
+                              <p>
+                                <strong>Payment Status:</strong>{" "}
+                                {booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"}
+                              </p>
+                              {booking.cancellationReason && (
+                                <p>
+                                  <strong>Cancellation Reason:</strong> {booking.cancellationReason}
+                                </p>
+                              )}
+                              {booking.reviewRating !== null && (
+                                <p>
+                                  <strong>Review:</strong> {booking.reviewRating} Stars
+                                  {booking.reviewMessage && `: "${booking.reviewMessage}"`}
+                                </p>
+                              )}
+                              <p>
+                                <strong>Booked At:</strong> {format(new Date(booking.createdAt), "PPP p")}
+                              </p>
                               {booking.driverLatitude && booking.driverLongitude && (
-                                <p><strong>Driver Location:</strong> Lat: {booking.driverLatitude.toFixed(5)}, Lon: {booking.driverLongitude.toFixed(5)}</p>
+                                <p>
+                                  <strong>Driver Location:</strong> Lat: {booking.driverLatitude.toFixed(5)}, Lon:{" "}
+                                  {booking.driverLongitude.toFixed(5)}
+                                </p>
                               )}
                             </div>
                           </DialogContent>
