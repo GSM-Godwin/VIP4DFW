@@ -42,14 +42,14 @@ export function BookingForm({ user }: BookingFormProps) {
       {/* NEW: Display cars visually above the form */}
       <div className="mb-8 text-center">
         <h2 className="text-3xl md:text-4xl font-bold text-vipo-DEFAULT mb-6">Our Luxury Fleet</h2>
-        <div className="flex flex-col sm:flex-row justify-center items-center gap-8">
+        <div className="flex flex-col sm:flex-row justify-baseline md:items-end items-center gap-8">
           <div className="flex flex-col items-center">
             <Image
               src="/images/cadillac.png"
               alt="2019 Cadillac Escalade"
               width={200}
               height={120}
-              className="rounded-lg shadow-lg mb-2"
+              className="rounded-lg shadow-lg bg-gray-800 mb-2"
             />
             <p className="text-lg font-semibold text-gray-200">2019 Cadillac Escalade</p>
           </div>
@@ -59,7 +59,7 @@ export function BookingForm({ user }: BookingFormProps) {
               alt="2020 Chevy Suburban"
               width={200}
               height={120}
-              className="rounded-lg shadow-lg mb-2 mt-2"
+              className="rounded-lg shadow-lg bg-gray-800 mb-2 mt-2 py-5 px-1"
             />
             <p className="text-lg font-semibold text-gray-200">2020 Chevy Suburban</p>
           </div>

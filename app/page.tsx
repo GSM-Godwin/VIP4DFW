@@ -14,12 +14,12 @@ export default async function HomePage() {
       <section className="relative w-full py-3 md:py-6 lg:py-12 flex flex-col items-center justify-center text-center px-4 space-y-8">
         <Image src="/images/vip4dfw-logo-orange.png" alt="VIP4DFW Logo" width={300} height={300} className="mb-8" />
         <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tighter text-vipo-DEFAULT">
-          🚖 Your VIP Ride to DFW & Dallas Love Field Starts Here
+          Your VIP Ride to DFW & Dallas Love Field Starts Here
         </h1>
         <p className="text-xl md:text-2xl lg:text-3xl text-gray-200 max-w-3xl">
           Luxury SUVs • Professional Chauffeurs • 24/7 On-Time Service
         </p>
-        <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">flat rate $85</p>
+        <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">Flat rate $85</p>
         <div className="text-lg md:text-xl text-gray-200 max-w-3xl">
           <p className="font-semibold text-vipo-DEFAULT">Cities included are:</p>
           <p>Dallas, Richardson, Plano, Allen, Wylie, McKinney, Frisco, Colony, Garland, Rowlett, Rockwall, Irving, Carrollton, Addison, Farmers Branch.</p>
