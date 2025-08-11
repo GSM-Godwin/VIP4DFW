@@ -4,7 +4,6 @@ import { getAdminBookings } from "@/app/bookings/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
   DialogContent,
@@ -15,30 +14,37 @@ import {
 } from "@/components/ui/dialog"
 import { AdminBookingActions } from "@/components/admin-booking-actions"
 import { AdminLocationTracker } from "@/components/admin-location-tracker"
-import { Star } from "lucide-react" // NEW: Import Star icon
+import { Star } from "lucide-react"
+import { Suspense } from "react"
+
+import AdminFilterForm from "./admin-filter-form"
 
 export default async function AdminDashboardPage({
   searchParams,
 }: {
-  searchParams: { status?: string }
+  searchParams: {
+    status?: string | string[]
+    search?: string
+  }
 }) {
   const session = await getServerSession()
 
-  // Authorization check: Redirect if not logged in or not an admin
   // if (!session || (session.user as any).role !== "admin") {
-  //   redirect("/login?error=unauthorized") // Redirect to login with an unauthorized error
+  //   redirect("/login?error=unauthorized")
   // }
 
-  const filterStatus = searchParams.status as
-    | "all"
-    | "pending"
-    | "confirmed"
-    | "declined"
-    | "completed"
-    | "cancelled"
-    | undefined
+  // Safely access searchParams properties
+  const statuses = Array.isArray(searchParams.status)
+    ? searchParams.status
+    : searchParams.status
+      ? [searchParams.status]
+      : []
+  const searchQuery = searchParams.search || "" // Access directly, Next.js should handle this prop safely
 
-  const { bookings, message, success } = await getAdminBookings({ status: filterStatus })
+  const { bookings, message, success } = await getAdminBookings({
+    statuses: statuses,
+    searchQuery,
+  })
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
@@ -57,208 +63,186 @@ export default async function AdminDashboardPage({
           <CardTitle className="text-2xl font-bold text-vipo-DEFAULT">All Bookings</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5">
-              <TabsTrigger value="all" asChild>
-                <a href="/admin/dashboard">All</a>
-              </TabsTrigger>
-              <TabsTrigger value="pending" asChild>
-                <a href="/admin/dashboard?status=pending">Pending</a>
-              </TabsTrigger>
-              <TabsTrigger value="confirmed" asChild>
-                <a href="/admin/dashboard?status=confirmed">Confirmed</a>
-              </TabsTrigger>
-              <TabsTrigger value="declined" asChild>
-                <a href="/admin/dashboard?status=declined">Declined</a>
-              </TabsTrigger>
-              <TabsTrigger value="completed" asChild>
-                <a href="/admin/dashboard?status=completed">Completed</a>
-              </TabsTrigger>
-              <TabsTrigger value="cancelled">
-                {" "}
-                {/* NEW: Cancelled tab */}
-                <a href="/admin/dashboard?status=cancelled">Cancelled</a>
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value={filterStatus || "all"} className="mt-4">
-              {!success && <p className="text-red-500 text-center">{message}</p>}
-              {success && bookings.length === 0 && (
-                <p className="text-gray-300 text-center">No bookings found for this filter.</p>
-              )}
-              {success && bookings.length > 0 && (
-                <div className="space-y-4">
-                  {bookings.map((booking) => (
-                    <Card key={booking.id} className="bg-gray-700 border-gray-600 p-4">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-                        <div className="flex-1">
-                          <p className="text-lg font-semibold text-vipo-DEFAULT">
-                            {booking.pickupLocation} to {booking.dropoffLocation}
-                          </p>
-                          <p className="text-gray-300 text-sm">Booking ID: {booking.id}</p>
-                          <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
-                          <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
-                          <p className="text-gray-300">
-                            Contact: {booking.contactName} ({booking.contactEmail}, {booking.contactPhone})
-                          </p>
-                          <p className="text-gray-300">Total Price: ${booking.totalPrice.toFixed(2)}</p>
-                          {booking.customMessage && (
-                            <p className="text-gray-300 text-sm">Notes: {booking.customMessage}</p>
-                          )}
-                          <p
-                            className={`font-medium ${
-                              booking.status === "pending"
-                                ? "text-yellow-400"
-                                : booking.status === "confirmed"
-                                  ? "text-green-400"
-                                  : booking.status === "completed"
-                                    ? "text-blue-400"
-                                    : "text-red-400"
-                            }`}
-                          >
-                            Status: {booking.status}
-                          </p>
-                          <p
-                            className={`font-medium ${
-                              booking.paymentStatus === "unpaid" || booking.paymentStatus === "pending_cash"
-                                ? "text-yellow-400"
-                                : booking.paymentStatus === "paid"
-                                  ? "text-green-400"
-                                  : "text-red-400"
-                            }`}
-                          >
-                            Payment: {(() => {
-                              if (booking.paymentStatus === "pending_cash") {
-                                return "Cash on Arrival"
-                              }
-                              if (booking.paymentStatus === "paid") {
-                                return "Credit Card (Paid)"
-                              }
-                              return booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"
-                            })()}
-                          </p>
-                          {booking.cancellationReason && ( // NEW: Display cancellation reason
-                            <p className="text-red-300 text-sm">Cancellation Reason: {booking.cancellationReason}</p>
-                          )}
-                          {booking.reviewRating !== null && ( // NEW: Display review
-                            <div className="flex items-center gap-1 text-gray-300 text-sm">
-                              Review:
-                              {[...Array(5)].map((_, i) => (
-                                <Star
-                                  key={i}
-                                  className={`w-4 h-4 ${
-                                    (booking.reviewRating || 0) > i
-                                      ? "text-vipo-DEFAULT fill-vipo-DEFAULT"
-                                      : "text-gray-400"
-                                  }`}
-                                />
-                              ))}
-                              {booking.reviewMessage && <span className="ml-2 italic">"{booking.reviewMessage}"</span>}
-                            </div>
-                          )}
-                        </div>
-                        <AdminBookingActions bookingId={booking.id} currentStatus={booking.status || "pending"} />
-                        {/* AdminLocationTracker only for confirmed bookings */}
-                        {booking.status === "confirmed" && (
-                          <AdminLocationTracker
-                            bookingId={booking.id}
-                            initialLatitude={booking.driverLatitude}
-                            initialLongitude={booking.driverLongitude}
-                          />
+          <Suspense>
+            <AdminFilterForm initialSearch={searchQuery} initialStatuses={statuses} />
+          </Suspense>
+
+          <div className="mt-6">
+            {!success && <p className="text-red-500 text-center">{message}</p>}
+            {success && bookings.length === 0 && (
+              <p className="text-gray-300 text-center">No bookings found for the current filters.</p>
+            )}
+            {success && bookings.length > 0 && (
+              <div className="space-y-4">
+                {bookings.map((booking) => (
+                  <Card key={booking.id} className="bg-gray-700 border-gray-600 p-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                      <div className="flex-1">
+                        <p className="text-lg font-semibold text-vipo-DEFAULT">
+                          {booking.pickupLocation} to {booking.dropoffLocation}
+                        </p>
+                        <p className="text-gray-300 text-sm">Booking ID: {booking.id}</p>
+                        <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
+                        <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
+                        <p className="text-gray-300">
+                          Contact: {booking.contactName} ({booking.contactEmail}, {booking.contactPhone})
+                        </p>
+                        <p className="text-gray-300">Total Price: ${booking.totalPrice.toFixed(2)}</p>
+                        {booking.customMessage && (
+                          <p className="text-gray-300 text-sm">Notes: {booking.customMessage}</p>
                         )}
-                        {/* Optional: Add a view details button with a dialog */}
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black bg-transparent"
-                            >
-                              View Details
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="bg-gray-800 text-white border-vipo-DEFAULT">
-                            <DialogHeader>
-                              <DialogTitle className="text-vipo-DEFAULT">Booking Details: {booking.id}</DialogTitle>
-                              <DialogDescription className="text-gray-300">
-                                Full information for this booking.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-2 text-gray-200">
-                              <p>
-                                <strong>Pickup:</strong> {booking.pickupLocation}
-                              </p>
-                              <p>
-                                <strong>Drop-off:</strong> {booking.dropoffLocation}
-                              </p>
-                              <p>
-                                <strong>Time:</strong> {format(new Date(booking.pickupTime), "PPP p")}
-                              </p>
-                              <p>
-                                <strong>Passengers:</strong> {booking.numPassengers}
-                              </p>
-                              <p>
-                                <strong>Service Type:</strong> {booking.serviceType.replace(/_/g, " ")}
-                              </p>
-                              <p>
-                                <strong>Contact Name:</strong> {booking.contactName}
-                              </p>
-                              <p>
-                                <strong>Contact Email:</strong> {booking.contactEmail}
-                              </p>
-                              <p>
-                                <strong>Contact Phone:</strong> {booking.contactPhone}
-                              </p>
-                              <p>
-                                <strong>Total Price:</strong> ${booking.totalPrice.toFixed(2)}
-                              </p>
-                              {booking.customMessage && (
-                                <p>
-                                  <strong>Custom Message:</strong> {booking.customMessage}
-                                </p>
-                              )}
-                              <p>
-                                <strong>Status:</strong> {booking.status}
-                              </p>
-                              <p>
-                                <strong>Payment Status:</strong> {(() => {
-                                  if (booking.paymentStatus === "pending_cash") {
-                                    return "Cash on Arrival"
-                                  }
-                                  if (booking.paymentStatus === "paid") {
-                                    return "Credit Card (Paid)"
-                                  }
-                                  return booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"
-                                })()}
-                              </p>
-                              {booking.cancellationReason && (
-                                <p>
-                                  <strong>Cancellation Reason:</strong> {booking.cancellationReason}
-                                </p>
-                              )}
-                              {booking.reviewRating !== null && (
-                                <p>
-                                  <strong>Review:</strong> {booking.reviewRating} Stars
-                                  {booking.reviewMessage && `: "${booking.reviewMessage}"`}
-                                </p>
-                              )}
-                              <p>
-                                <strong>Booked At:</strong> {format(new Date(booking.createdAt), "PPP p")}
-                              </p>
-                              {booking.driverLatitude && booking.driverLongitude && (
-                                <p>
-                                  <strong>Driver Location:</strong> Lat: {booking.driverLatitude.toFixed(5)}, Lon:{" "}
-                                  {booking.driverLongitude.toFixed(5)}
-                                </p>
-                              )}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                        <p
+                          className={`font-medium ${
+                            booking.status === "pending"
+                              ? "text-yellow-400"
+                              : booking.status === "confirmed"
+                                ? "text-green-400"
+                                : booking.status === "completed"
+                                  ? "text-blue-400"
+                                  : "text-red-400"
+                          }`}
+                        >
+                          Status: {booking.status}
+                        </p>
+                        <p
+                          className={`font-medium ${
+                            booking.paymentStatus === "unpaid" || booking.paymentStatus === "pending_cash"
+                              ? "text-yellow-400"
+                              : booking.paymentStatus === "paid"
+                                ? "text-green-400"
+                                : "text-red-400"
+                          }`}
+                        >
+                          Payment: {(() => {
+                            if (booking.paymentStatus === "pending_cash") {
+                              return "Cash on Arrival"
+                            }
+                            if (booking.paymentStatus === "paid") {
+                              return "Credit Card (Paid)"
+                            }
+                            return booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"
+                          })()}
+                        </p>
+                        {booking.cancellationReason && (
+                          <p className="text-red-300 text-sm">Cancellation Reason: {booking.cancellationReason}</p>
+                        )}
+                        {booking.reviewRating !== null && (
+                          <div className="flex items-center gap-1 text-gray-300 text-sm">
+                            Review:
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`w-4 h-4 ${
+                                  (booking.reviewRating || 0) > i
+                                    ? "text-vipo-DEFAULT fill-vipo-DEFAULT"
+                                    : "text-gray-400"
+                                }`}
+                              />
+                            ))}
+                            {booking.reviewMessage && <span className="ml-2 italic">"{booking.reviewMessage}"</span>}
+                          </div>
+                        )}
                       </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
+                      <AdminBookingActions bookingId={booking.id} currentStatus={booking.status || "pending"} />
+                      {booking.status === "confirmed" && (
+                        <AdminLocationTracker
+                          bookingId={booking.id}
+                          initialLatitude={booking.driverLatitude}
+                          initialLongitude={booking.driverLongitude}
+                        />
+                      )}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black bg-transparent"
+                          >
+                            View Details
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-gray-800 text-white border-vipo-DEFAULT">
+                          <DialogHeader>
+                            <DialogTitle className="text-vipo-DEFAULT">Booking Details: {booking.id}</DialogTitle>
+                            <DialogDescription className="text-gray-300">
+                              Full information for this booking.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-2 text-gray-200">
+                            <p>
+                              <strong>Pickup:</strong> {booking.pickupLocation}
+                            </p>
+                            <p>
+                              <strong>Drop-off:</strong> {booking.dropoffLocation}
+                            </p>
+                            <p>
+                              <strong>Time:</strong> {format(new Date(booking.pickupTime), "PPP p")}
+                            </p>
+                            <p>
+                              <strong>Passengers:</strong> {booking.numPassengers}
+                            </p>
+                            <p>
+                              <strong>Service Type:</strong> {booking.serviceType.replace(/_/g, " ")}
+                            </p>
+                            <p>
+                              <strong>Contact Name:</strong> {booking.contactName}
+                            </p>
+                            <p>
+                              <strong>Contact Email:</strong> {booking.contactEmail}
+                            </p>
+                            <p>
+                              <strong>Contact Phone:</strong> {booking.contactPhone}
+                            </p>
+                            <p>
+                              <strong>Total Price:</strong> ${booking.totalPrice.toFixed(2)}
+                            </p>
+                            {booking.customMessage && (
+                              <p>
+                                <strong>Custom Message:</strong> {booking.customMessage}
+                              </p>
+                            )}
+                            <p>
+                              <strong>Status:</strong> {booking.status}
+                            </p>
+                            <p>
+                              <strong>Payment Status:</strong> {(() => {
+                                if (booking.paymentStatus === "pending_cash") {
+                                  return "Cash on Arrival"
+                                }
+                                if (booking.paymentStatus === "paid") {
+                                  return "Credit Card (Paid)"
+                                }
+                                return booking.paymentStatus ? booking.paymentStatus.replace(/_/g, " ") : "N/A"
+                              })()}
+                            </p>
+                            {booking.cancellationReason && (
+                              <p>
+                                <strong>Cancellation Reason:</strong> {booking.cancellationReason}
+                              </p>
+                            )}
+                            {booking.reviewRating !== null && (
+                              <p>
+                                <strong>Review:</strong> {booking.reviewRating} Stars
+                                {booking.reviewMessage && `: "${booking.reviewMessage}"`}
+                              </p>
+                            )}
+                            <p>
+                              <strong>Booked At:</strong> {format(new Date(booking.createdAt), "PPP p")}
+                            </p>
+                            {booking.driverLatitude && booking.driverLongitude && (
+                              <p>
+                                <strong>Driver Location:</strong> Lat: {booking.driverLatitude.toFixed(5)}, Lon:{" "}
+                                {booking.driverLongitude.toFixed(5)}
+                              </p>
+                            )}
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
