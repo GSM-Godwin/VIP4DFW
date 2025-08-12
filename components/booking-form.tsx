@@ -47,21 +47,21 @@ export function BookingForm({ user }: BookingFormProps) {
             <Image
               src="/images/cadillac.png"
               alt="2019 Cadillac Escalade"
-              width={200}
+              width={300}
               height={120}
               className="rounded-lg shadow-lg bg-gray-800 mb-2"
             />
-            <p className="text-lg font-semibold text-gray-200">2019 Cadillac Escalade</p>
+            <p className="text-xl font-semibold text-gray-200">Cadillac Escalade</p>
           </div>
           <div className="flex flex-col items-center">
             <Image
-              src="/images/suburban.png"
+              src="/images/suburban2.png"
               alt="2020 Chevy Suburban"
-              width={200}
+              width={360}
               height={120}
-              className="rounded-lg shadow-lg bg-gray-800 mb-2 mt-2 py-5 px-1"
+              className="rounded-lg shadow-lg bg-gray-800 mb-2 mt-2"
             />
-            <p className="text-lg font-semibold text-gray-200">2020 Chevy Suburban</p>
+            <p className="text-xl font-semibold text-gray-200">Chevy Suburban</p>
           </div>
         </div>
         <p className="text-md text-gray-400 mt-4">We will assign an available luxury SUV for your trip.</p>

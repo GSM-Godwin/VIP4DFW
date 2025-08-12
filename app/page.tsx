@@ -23,7 +23,7 @@ export default async function HomePage() {
           Your VIP Ride to DFW & Dallas Love Field Starts Here
         </h1>
         <p className="text-xl md:text-2xl lg:text-3xl text-gray-200 max-w-3xl">
-          Luxury SUVs • Professional Chauffeurs • 24/7 On-Time Service
+          • Luxury SUVs <br className="block md:hidden" /> • Professional Chauffeurs <br /> • 24/7 On-Time Service
         </p>
         <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">Flat rate $85</p>
         <div className="text-lg md:text-xl text-gray-200 max-w-3xl">
