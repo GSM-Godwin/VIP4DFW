@@ -1,7 +1,5 @@
 "use client"
 
-import { DialogDescription } from "@/components/ui/dialog"
-
 import type React from "react"
 
 import { useState, useEffect } from "react"
@@ -10,7 +8,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Search, Filter } from "lucide-react"
 
 interface AdminFilterFormProps {
@@ -27,11 +33,12 @@ export default function AdminFilterForm({ initialSearch, initialStatuses }: Admi
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(initialStatuses)
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false)
 
-  // Sync internal state with URL params on initial load or URL change
   useEffect(() => {
-    setSearchQuery(searchParams.get("search") || "")
+    const searchFromUrl = searchParams.get("search") || ""
     const statusesFromUrl = searchParams.getAll("status")
-    setSelectedStatuses(statusesFromUrl.length > 0 ? statusesFromUrl : [])
+
+    setSearchQuery(searchFromUrl)
+    setSelectedStatuses(statusesFromUrl)
   }, [searchParams])
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,34 +51,33 @@ export default function AdminFilterForm({ initialSearch, initialStatuses }: Admi
   }
 
   const handleStatusChange = (status: string, checked: boolean) => {
-    setSelectedStatuses((prev) => (checked ? [...prev, status] : prev.filter((s) => s !== status)))
+    setSelectedStatuses((prev) => {
+      const newStatuses = checked ? [...prev, status] : prev.filter((s) => s !== status)
+      return newStatuses
+    })
   }
 
   const applyFilters = () => {
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams()
 
-    // Set search query
-    if (searchQuery) {
-      params.set("search", searchQuery)
-    } else {
-      params.delete("search")
+    if (searchQuery.trim()) {
+      params.set("search", searchQuery.trim())
     }
 
-    // Set statuses
-    params.delete("status") // Clear existing status params
     selectedStatuses.forEach((status) => {
       params.append("status", status)
     })
 
-    router.push(`/admin/dashboard?${params.toString()}`)
-    setIsFilterDialogOpen(false) // Close dialog after applying filters
+    const newUrl = `/admin/dashboard?${params.toString()}`
+
+    router.push(newUrl)
+    setIsFilterDialogOpen(false)
   }
 
   const clearFilters = () => {
     setSearchQuery("")
     setSelectedStatuses([])
-    const params = new URLSearchParams() // Start with empty params
-    router.push(`/admin/dashboard?${params.toString()}`)
+    router.push("/admin/dashboard")
     setIsFilterDialogOpen(false)
   }
 
@@ -81,7 +87,7 @@ export default function AdminFilterForm({ initialSearch, initialStatuses }: Admi
       <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center gap-2">
         <Input
           type="text"
-          placeholder="Search by ID, name, location..."
+          placeholder="Search by name, email, location..."
           value={searchQuery}
           onChange={handleSearchChange}
           className="bg-gray-700 border-gray-600 text-white flex-1"
@@ -100,13 +106,16 @@ export default function AdminFilterForm({ initialSearch, initialStatuses }: Admi
             className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black bg-transparent flex items-center gap-2"
           >
             <Filter className="w-5 h-5" />
-            Filter
+            Filter {selectedStatuses.length > 0 && `(${selectedStatuses.length})`}
           </Button>
         </DialogTrigger>
         <DialogContent className="bg-gray-800 text-white border-vipo-DEFAULT">
           <DialogHeader>
             <DialogTitle className="text-vipo-DEFAULT">Filter Bookings</DialogTitle>
-            <DialogDescription className="text-gray-300">Select the statuses you want to view.</DialogDescription>
+            <DialogDescription className="text-gray-300">
+              Select the statuses you want to view. Currently selected:{" "}
+              {selectedStatuses.length > 0 ? selectedStatuses.join(", ") : "None"}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             {ALL_STATUSES.map((status) => (

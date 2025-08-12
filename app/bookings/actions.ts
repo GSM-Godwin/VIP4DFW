@@ -276,22 +276,21 @@ export async function getAdminBookings(filter: AdminBookingFilter = {}) {
     }
 
     // Search by query (case-insensitive, partial match)
-    if (filter.searchQuery) {
-      const search = filter.searchQuery.toLowerCase()
+    if (filter.searchQuery && filter.searchQuery.trim()) {
+      const search = filter.searchQuery.trim().toLowerCase()
       whereClause.OR = [
-        // Removed 'id' from search as 'contains' is not suitable for UUIDs
         { contactName: { contains: search, mode: "insensitive" } },
         { contactEmail: { contains: search, mode: "insensitive" } },
         { contactPhone: { contains: search, mode: "insensitive" } },
         { pickupLocation: { contains: search, mode: "insensitive" } },
         { dropoffLocation: { contains: search, mode: "insensitive" } },
-        { customMessage: { contains: search, mode: "insensitive" } }, // Also search custom messages
+        { customMessage: { contains: search, mode: "insensitive" } },
       ]
     }
 
     const bookings = await prisma.booking.findMany({
       where: whereClause,
-      orderBy: { createdAt: "desc" }, // Order by creation time for admin view
+      orderBy: { createdAt: "desc" },
     })
 
     const serializedBookings = bookings.map((booking) => ({

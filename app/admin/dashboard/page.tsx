@@ -22,10 +22,10 @@ import AdminFilterForm from "./admin-filter-form"
 export default async function AdminDashboardPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     status?: string | string[]
     search?: string
-  }
+  }>
 }) {
   const session = await getServerSession()
 
@@ -33,13 +33,12 @@ export default async function AdminDashboardPage({
   //   redirect("/login?error=unauthorized")
   // }
 
-  // Safely access searchParams properties
-  const statuses = Array.isArray(searchParams.status)
-    ? searchParams.status
-    : searchParams.status
-      ? [searchParams.status]
-      : []
-  const searchQuery = searchParams.search || "" // Access directly, Next.js should handle this prop safely
+  // Await searchParams since it's now a Promise in Next.js 15
+  const params = await searchParams
+
+  // Process the status parameter correctly
+  const statuses = Array.isArray(params.status) ? params.status : params.status ? [params.status] : []
+  const searchQuery = params.search || ""
 
   const { bookings, message, success } = await getAdminBookings({
     statuses: statuses,
