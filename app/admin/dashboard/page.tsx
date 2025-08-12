@@ -1,23 +1,18 @@
+import { DialogTrigger } from "@/components/ui/dialog"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { getAdminBookings } from "@/app/bookings/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AdminBookingActions } from "@/components/admin-booking-actions"
 import { AdminLocationTracker } from "@/components/admin-location-tracker"
 import { Star } from "lucide-react"
 import { Suspense } from "react"
 
 import AdminFilterForm from "./admin-filter-form"
+import { AdminReviewManager } from "@/components/admin-review-manager"
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -126,8 +121,8 @@ export default async function AdminDashboardPage({
                           <p className="text-red-300 text-sm">Cancellation Reason: {booking.cancellationReason}</p>
                         )}
                         {booking.reviewRating !== null && (
-                          <div className="flex items-center gap-1 text-gray-300 text-sm">
-                            Review:
+                          <div className="flex items-center gap-2 text-gray-300 text-sm">
+                            <span>Review:</span>
                             {[...Array(5)].map((_, i) => (
                               <Star
                                 key={i}
@@ -139,6 +134,13 @@ export default async function AdminDashboardPage({
                               />
                             ))}
                             {booking.reviewMessage && <span className="ml-2 italic">"{booking.reviewMessage}"</span>}
+                            <AdminReviewManager
+                              bookingId={booking.id}
+                              reviewRating={booking.reviewRating}
+                              reviewMessage={booking.reviewMessage || ""}
+                              contactName={booking.contactName}
+                              isPublished={booking.reviewIsPublished || false}
+                            />
                           </div>
                         )}
                       </div>

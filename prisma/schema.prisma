@@ -118,6 +118,7 @@ model Booking {
   cancellationReason String?   @map("cancellation_reason") // NEW: Reason for cancellation
   reviewRating       Int?      @map("review_rating") // NEW: Client's review rating (1-5 stars)
   reviewMessage      String?   @map("review_message") // NEW: Client's review message
+  reviewIsPublished  Boolean?  @default(false) @map("review_is_published") // NEW: Whether the review is published on homepage
 
   user    User?    @relation(fields: [userId], references: [id])
   vehicle Vehicle? @relation(fields: [vehicleId], references: [id])

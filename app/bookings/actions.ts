@@ -640,3 +640,77 @@ export async function submitReview(bookingId: string, rating: number, message: s
     return { success: false, message: `Failed to submit review: ${error.message}` }
   }
 }
+
+// NEW: Function to get published reviews for homepage
+export async function getPublishedReviews() {
+  try {
+    const reviews = await prisma.booking.findMany({
+      where: {
+        reviewRating: { not: null },
+        reviewMessage: { not: null },
+        reviewIsPublished: true,
+      },
+      select: {
+        id: true,
+        reviewRating: true,
+        reviewMessage: true,
+        contactName: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10, // Limit to 10 most recent published reviews
+    })
+
+    const serializedReviews = reviews.map((review) => ({
+      ...review,
+      reviewRating: review.reviewRating ? Number(review.reviewRating) : null,
+    }))
+
+    return { success: true, reviews: serializedReviews }
+  } catch (error: any) {
+    console.error("Error fetching published reviews:", error.message)
+    return { success: false, reviews: [] }
+  }
+}
+
+// NEW: Function to toggle review publication status
+export async function toggleReviewPublication(bookingId: string) {
+  const session = await getServerSession()
+  // if (!session || (session.user as any).role !== "admin") {
+  //   return { success: false, message: "Unauthorized: Only admins can manage review publication." }
+  // }
+
+  try {
+    // First get the current status
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: { reviewIsPublished: true, reviewRating: true, reviewMessage: true },
+    })
+
+    if (!booking) {
+      return { success: false, message: "Booking not found." }
+    }
+
+    if (!booking.reviewRating || !booking.reviewMessage) {
+      return { success: false, message: "No review found for this booking." }
+    }
+
+    // Toggle the publication status
+    const newStatus = !booking.reviewIsPublished
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { reviewIsPublished: newStatus },
+    })
+
+    revalidatePath("/admin/dashboard")
+    revalidatePath("/") // Revalidate homepage to show/hide the review
+
+    return {
+      success: true,
+      message: `Review ${newStatus ? "published" : "unpublished"} successfully.`,
+      isPublished: newStatus,
+    }
+  } catch (error: any) {
+    console.error("Error toggling review publication:", error.message)
+    return { success: false, message: `Failed to update review publication: ${error.message}` }
+  }
+}

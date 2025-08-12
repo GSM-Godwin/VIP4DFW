@@ -1,12 +1,17 @@
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { Check, Star, Phone, Mail } from 'lucide-react'
+import { Check, Star, Phone } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { BookingForm } from "@/components/booking-form"
 import { Card } from "@/components/ui/card"
+import { getPublishedReviews } from "@/app/bookings/actions" // NEW: Import function to get published reviews
+
 export default async function HomePage() {
   const session = await getServerSession()
   const user = session?.user || null
+
+  // NEW: Fetch published reviews
+  const { reviews: publishedReviews } = await getPublishedReviews()
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -22,7 +27,10 @@ export default async function HomePage() {
         <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">Flat rate $85</p>
         <div className="text-lg md:text-xl text-gray-200 max-w-3xl">
           <p className="font-semibold text-vipo-DEFAULT">Cities included are:</p>
-          <p>Dallas, Richardson, Plano, Allen, Wylie, McKinney, Frisco, Colony, Garland, Rowlett, Rockwall, Irving, Carrollton, Addison, Farmers Branch.</p>
+          <p>
+            Dallas, Richardson, Plano, Allen, Wylie, McKinney, Frisco, Colony, Garland, Rowlett, Rockwall, Irving,
+            Carrollton, Addison, Farmers Branch.
+          </p>
           <p className="mt-2 text-sm text-gray-400">If your city is NOT mentioned, please contact us for your price.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-4 mt-6">
@@ -77,7 +85,7 @@ export default async function HomePage() {
             ✈️ Premium Airport Transfers to DFW & Dallas Love Field ONLY $85
           </h2>
           <p className="text-lg md:text-xl text-gray-300 max-w-3xl mx-auto">
-            Whether you’re flying for business or leisure, VIP4DFW provides reliable, luxury airport transfers. We track
+            Whether you're flying for business or leisure, VIP4DFW provides reliable, luxury airport transfers. We track
             your flight for delays or early arrivals to ensure your driver is always ready.
           </p>
           <ul className="list-none space-y-2 text-lg md:text-xl text-gray-200">
@@ -95,7 +103,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* City Rides Section */}
+      {/* NEW: City Rides Section */}
       <section className="w-full py-12 md:py-24 lg:py-32 bg-black text-white px-4">
         <div className="container mx-auto text-center space-y-8">
           <h2 className="text-3xl md:text-5xl font-bold text-vipo-DEFAULT">
@@ -105,8 +113,23 @@ export default async function HomePage() {
             Enjoy the convenience of hourly chauffeur service for business meetings, special events, or a night out in
             Dallas. Let us handle the driving while you focus on what matters.
           </p>
+          <div className="flex flex-col items-center space-y-4">
+            <p className="text-2xl md:text-3xl font-bold text-vipo-DEFAULT">📍 $95 per Hour</p>
+            <p className="text-lg text-gray-300">(Payment after the trip)</p>
+          </div>
+          <ul className="list-none space-y-2 text-lg md:text-xl text-gray-200 max-w-2xl mx-auto">
+            <li className="flex items-center justify-center gap-2">
+              <Check className="w-6 h-6 text-vipo-DEFAULT" /> Perfect for business meetings
+            </li>
+            <li className="flex items-center justify-center gap-2">
+              <Check className="w-6 h-6 text-vipo-DEFAULT" /> Special events and celebrations
+            </li>
+            <li className="flex items-center justify-center gap-2">
+              <Check className="w-6 h-6 text-vipo-DEFAULT" /> Night out in Dallas
+            </li>
+          </ul>
           <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
-            Book Your City Ride Today
+            📍 Book Your City Ride Today
           </Button>
         </div>
       </section>
@@ -116,6 +139,7 @@ export default async function HomePage() {
         <div className="container mx-auto text-center space-y-8">
           <h2 className="text-3xl md:text-5xl font-bold text-vipo-DEFAULT">Testimonials</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Static testimonials */}
             <Card className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
               <div className="flex justify-center mb-4">
                 {[...Array(5)].map((_, i) => (
@@ -123,7 +147,7 @@ export default async function HomePage() {
                 ))}
               </div>
               <p className="text-lg italic mb-4">
-                “VIP4DFW was on time, professional, and made our airport transfer seamless. Highly recommend!”
+                "VIP4DFW was on time, professional, and made our airport transfer seamless. Highly recommend!"
               </p>
               <p className="font-semibold text-gray-300">– Sarah W.</p>
             </Card>
@@ -134,11 +158,10 @@ export default async function HomePage() {
                 ))}
               </div>
               <p className="text-lg italic mb-4">
-                “Best black car service in Dallas! Clean SUV, friendly driver, and easy booking process.”
+                "Best black car service in Dallas! Clean SUV, friendly driver, and easy booking process."
               </p>
               <p className="font-semibold text-gray-300">– David M.</p>
             </Card>
-            {/* NEW TESTIMONIALS */}
             <Card className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
               <div className="flex justify-center mb-4">
                 {[...Array(5)].map((_, i) => (
@@ -146,7 +169,7 @@ export default async function HomePage() {
                 ))}
               </div>
               <p className="text-lg italic mb-4">
-                “Always my go-to for DFW airport. Punctual, comfortable, and the drivers are always courteous.”
+                "Always my go-to for DFW airport. Punctual, comfortable, and the drivers are always courteous."
               </p>
               <p className="font-semibold text-gray-300">– Jessica L.</p>
             </Card>
@@ -157,7 +180,7 @@ export default async function HomePage() {
                 ))}
               </div>
               <p className="text-lg italic mb-4">
-                “Used VIP4DFW for a corporate event. The service was impeccable, and the vehicle was spotless.”
+                "Used VIP4DFW for a corporate event. The service was impeccable, and the vehicle was spotless."
               </p>
               <p className="font-semibold text-gray-300">– Robert K.</p>
             </Card>
@@ -168,36 +191,34 @@ export default async function HomePage() {
                 ))}
               </div>
               <p className="text-lg italic mb-4">
-                “Reliable and luxurious. VIP4DFW makes traveling stress-free. Highly recommend their airport service.”
+                "Reliable and luxurious. VIP4DFW makes traveling stress-free. Highly recommend their airport service."
               </p>
               <p className="font-semibold text-gray-300">– Emily R.</p>
             </Card>
+
+            {/* NEW: Dynamic published reviews */}
+            {publishedReviews.map((review) => (
+              <Card key={review.id} className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
+                <div className="flex justify-center mb-4">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-6 h-6 ${
+                        (review.reviewRating || 0) > i ? "text-vipo-DEFAULT fill-vipo-DEFAULT" : "text-gray-400"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <p className="text-lg italic mb-4">"{review.reviewMessage}"</p>
+                <p className="font-semibold text-gray-300">– {review.contactName}</p>
+              </Card>
+            ))}
           </div>
           <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
             <span className="hidden md:flex">✨ Experience the VIP difference – </span>Book Your Ride Now!
           </Button>
         </div>
       </section>
-
-      {/* Footer / Contact Section */}
-      {/* <footer className="w-full py-12 md:py-16 bg-gray-900 text-gray-300 px-4">
-        <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
-          <div className="flex items-center gap-3">
-            <Phone className="w-6 h-6 text-vipo-DEFAULT" />
-            <span className="text-lg">Call/Text 24/7: (Your Number)</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <Mail className="w-6 h-6 text-vipo-DEFAULT" />
-            <span className="text-lg">Email: info@vip4dfw.com</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-lg">📍 Dallas–Fort Worth, Texas</span>
-          </div>
-        </div>
-        <div className="mt-8 text-center text-sm text-gray-500">
-          &copy; {new Date().getFullYear()} VIP4DFW. All rights reserved.
-        </div>
-      </footer> */}
     </div>
   )
 }
