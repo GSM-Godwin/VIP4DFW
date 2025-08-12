@@ -4,13 +4,14 @@ import { Check, Star, Phone } from "lucide-react"
 import { getServerSession } from "next-auth"
 import { BookingForm } from "@/components/booking-form"
 import { Card } from "@/components/ui/card"
-import { getPublishedReviews } from "@/app/bookings/actions" // NEW: Import function to get published reviews
+import { getPublishedReviews } from "@/app/bookings/actions"
+import { ScrollToBookingButton } from "@/components/scroll-to-booking-button"
 
 export default async function HomePage() {
   const session = await getServerSession()
   const user = session?.user || null
 
-  // NEW: Fetch published reviews
+  // Fetch published reviews
   const { reviews: publishedReviews } = await getPublishedReviews()
 
   return (
@@ -34,9 +35,9 @@ export default async function HomePage() {
           <p className="mt-2 text-sm text-gray-400">If your city is NOT mentioned, please contact us for your price.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-4 mt-6">
-          <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2">
+          <ScrollToBookingButton className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2">
             <Check className="w-5 h-5" /> Book Now
-          </Button>
+          </ScrollToBookingButton>
           <Button
             variant="outline"
             className="border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2 bg-transparent"
@@ -46,8 +47,10 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Quick Booking Form - now a separate client component */}
-      <BookingForm user={user} />
+      {/* Quick Booking Form - now with ID for scrolling */}
+      <section id="booking-form">
+        <BookingForm user={user} />
+      </section>
 
       {/* Why Choose VIP4DFW Section */}
       <section className="w-full py-12 md:py-24 lg:py-32 bg-black text-white px-4">
@@ -97,13 +100,13 @@ export default async function HomePage() {
               <Check className="w-6 h-6 text-vipo-DEFAULT" /> On-time guarantee, every time
             </li>
           </ul>
-          <Button className="bg-vipo-DEFAULT w-fit self-center hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2 mt-8">
+          <ScrollToBookingButton className="bg-vipo-DEFAULT w-fit self-center hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg flex items-center gap-2 mt-8">
             <Phone className="w-5 h-5" /> Book <span className="hidden md:flex">Your Airport Transfer</span> Now
-          </Button>
+          </ScrollToBookingButton>
         </div>
       </section>
 
-      {/* NEW: City Rides Section */}
+      {/* City Rides Section */}
       <section className="w-full py-12 md:py-24 lg:py-32 bg-black text-white px-4">
         <div className="container mx-auto text-center space-y-8">
           <h2 className="text-3xl md:text-5xl font-bold text-vipo-DEFAULT">
@@ -128,9 +131,9 @@ export default async function HomePage() {
               <Check className="w-6 h-6 text-vipo-DEFAULT" /> Night out in Dallas
             </li>
           </ul>
-          <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
+          <ScrollToBookingButton className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
             📍 Book Your City Ride Today
-          </Button>
+          </ScrollToBookingButton>
         </div>
       </section>
 
@@ -196,7 +199,7 @@ export default async function HomePage() {
               <p className="font-semibold text-gray-300">– Emily R.</p>
             </Card>
 
-            {/* NEW: Dynamic published reviews */}
+            {/* Dynamic published reviews */}
             {publishedReviews.map((review) => (
               <Card key={review.id} className="bg-gray-800 text-white border-vipo-DEFAULT p-6">
                 <div className="flex justify-center mb-4">
@@ -214,9 +217,9 @@ export default async function HomePage() {
               </Card>
             ))}
           </div>
-          <Button className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
+          <ScrollToBookingButton className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 px-8 rounded-full text-lg mt-8">
             <span className="hidden md:flex">✨ Experience the VIP difference – </span>Book Your Ride Now!
-          </Button>
+          </ScrollToBookingButton>
         </div>
       </section>
     </div>
