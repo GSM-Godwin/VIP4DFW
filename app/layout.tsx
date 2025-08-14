@@ -86,15 +86,15 @@ return (
         <footer className="w-full py-12 md:py-16 bg-gray-900 text-gray-300 px-4">
           <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
             <div className="flex items-center gap-3">
-              <Phone className="w-6 h-6 text-vipo-DEFAULT" />
-              <span className="text-lg">Call/Text 24/7: (Your Number)</span>
+              <Phone className="w-4 md:w-6 h-6 text-vipo-DEFAULT" />
+              <span className="text-sm md:text-lg">Call/Text 24/7: 972 880 8880</span>
             </div>
             <div className="flex items-center gap-3">
-              <Mail className="w-6 h-6 text-vipo-DEFAULT" />
-              <span className="text-lg">Email: info@vip4dfw.com</span>
+              <Mail className="w-4 md:w-6 h-6 text-vipo-DEFAULT" />
+              <span className="text-sm md:text-lg">Email: Hello@TurcanPlus.com</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-lg">📍 Dallas–Fort Worth, Texas</span>
+              <span className="text-sm md:text-lg">📍 Dallas–Fort Worth, Texas</span>
             </div>
           </div>
           <div className="mt-8 text-center text-sm text-gray-500 flex flex-col md:flex-row justify-center items-center gap-2">

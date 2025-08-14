@@ -25,7 +25,14 @@ export default async function HomePage() {
         <p className="text-xl md:text-2xl lg:text-3xl text-gray-200 max-w-3xl">
           • Luxury SUVs <br className="block md:hidden" /> • Professional Chauffeurs <br /> • 24/7 On-Time Service
         </p>
-        <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">Flat rate $85</p>
+        <div>
+          <p className="text-xl font-extrabold text-vipo-DEFAULT">YOU CAN TRACK OUR VEHICLES IN REAL TIME RIGHT FROM YOUR PHONE</p>
+          <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">Flat rate $85</p>
+          <p>
+            "Minimum 1 Hour Required"
+          </p>
+
+        </div>
         <div className="text-lg md:text-xl text-gray-200 max-w-3xl">
           <p className="font-semibold text-vipo-DEFAULT">Cities included are:</p>
           <p>
