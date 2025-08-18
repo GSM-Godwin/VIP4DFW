@@ -2,11 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useParams } from "next/navigation"
-import { MapPin, Star } from "lucide-react" // NEW: Import Star
-import { useEffect, useState, useRef, useCallback } from "react" // NEW: Import useCallback
+import { MapPin, Star } from "lucide-react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { getBookingById } from "@/app/bookings/actions"
 import { GoogleMapComponent } from "@/components/google-map-component"
-import { ReviewForm } from "@/components/review-form" // NEW: Import ReviewForm
+import { ReviewForm } from "@/components/review-form"
+import { TipForm } from "@/components/tip-form"
 
 interface BookingData {
   id: string
@@ -16,8 +17,10 @@ interface BookingData {
   driverLatitude: number | null
   driverLongitude: number | null
   status: string
-  reviewRating: number | null // NEW: Add reviewRating
-  reviewMessage: string | null // NEW: Add reviewMessage
+  reviewRating: number | null
+  reviewMessage: string | null
+  tipAmount: number | null
+  tipStatus: string | null
 }
 
 export default function TrackBookingPage() {
@@ -97,6 +100,8 @@ export default function TrackBookingPage() {
     )
   }
 
+  // Show tip form for completed trips (regardless of review status)
+  const showTipForm = booking.status === "completed" && booking.tipStatus !== "paid"
   const showReviewForm = booking.status === "completed" && booking.reviewRating === null
   const showSubmittedReview = booking.status === "completed" && booking.reviewRating !== null
 
@@ -127,7 +132,18 @@ export default function TrackBookingPage() {
             </p>
           </div>
 
-          {!showReviewForm && !showSubmittedReview &&
+          {/* NEW: Tip Form Section */}
+          {showTipForm && (
+            <TipForm
+              bookingId={booking.id}
+              driverName="Your Driver" // You can make this dynamic if you have driver info
+              currentTipAmount={booking.tipAmount}
+              currentTipStatus={booking.tipStatus}
+              onTipCompleted={() => fetchBookingData(false)}
+            />
+          )}
+
+          {!showReviewForm && !showSubmittedReview && !showTipForm && (
             <div className="w-full h-64 rounded-lg overflow-hidden">
               {booking.driverLatitude !== null && booking.driverLongitude !== null && booking.status === "confirmed" ? (
                 <GoogleMapComponent latitude={booking.driverLatitude} longitude={booking.driverLongitude} />
@@ -139,11 +155,8 @@ export default function TrackBookingPage() {
                 </div>
               )}
             </div>
-            /* <p className="text-sm text-gray-400 mt-2">
-              Note: This is a simulated tracking feature. For a real production system, a dedicated driver app and a
-              robust real-time backend (e.g., WebSockets) would be used.
-            </p> */
-            }
+          )}
+
           {/* NEW: Conditional Review Section */}
           {showReviewForm && <ReviewForm bookingId={booking.id} onReviewSubmitted={() => fetchBookingData(false)} />}
 
@@ -164,6 +177,11 @@ export default function TrackBookingPage() {
               <p className="text-sm text-gray-400">Thank you for your feedback!</p>
             </div>
           )}
+
+          <p className="text-sm text-gray-400 mt-2">
+            Note: This is a simulated tracking feature. For a real production system, a dedicated driver app and a
+            robust real-time backend (e.g., WebSockets) would be used.
+          </p>
         </CardContent>
       </Card>
     </div>

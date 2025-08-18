@@ -111,14 +111,20 @@ model Booking {
   paymentStatus     String?   @default("unpaid") @map("payment_status")
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  driverLatitude    Decimal?  @map("driver_latitude") @db.Decimal(10, 7) // NEW: Driver's current latitude
-  driverLongitude   Decimal?  @map("driver_longitude") @db.Decimal(10, 7) // NEW: Driver's current longitude
-  checkoutSessionId String?   @unique @map("checkout_session_id") // NEW: For Stripe Checkout
-  customMessage     String?   @map("custom_message") // NEW: For custom messages from client
-  cancellationReason String?   @map("cancellation_reason") // NEW: Reason for cancellation
-  reviewRating       Int?      @map("review_rating") // NEW: Client's review rating (1-5 stars)
-  reviewMessage      String?   @map("review_message") // NEW: Client's review message
-  reviewIsPublished  Boolean?  @default(false) @map("review_is_published") // NEW: Whether the review is published on homepage
+  driverLatitude    Decimal?  @map("driver_latitude") @db.Decimal(10, 7) // Driver's current latitude
+  driverLongitude   Decimal?  @map("driver_longitude") @db.Decimal(10, 7) // Driver's current longitude
+  checkoutSessionId String?   @unique @map("checkout_session_id") // For Stripe Checkout
+  customMessage     String?   @map("custom_message") // For custom messages from client
+  cancellationReason String?   @map("cancellation_reason") // Reason for cancellation
+  reviewRating       Int?      @map("review_rating") // Client's review rating (1-5 stars)
+  reviewMessage      String?   @map("review_message") // Client's review message
+  reviewIsPublished  Boolean?  @default(false) @map("review_is_published") // Whether the review is published on homepage
+  
+  // NEW: Tip-related fields
+  tipAmount         Decimal?  @map("tip_amount") @db.Decimal(10, 2) // Tip amount in dollars
+  tipStatus         String?   @default("none") @map("tip_status") // 'none', 'pending', 'paid', 'failed'
+  tipPaymentIntentId String?  @map("tip_payment_intent_id") // Stripe Payment Intent ID for tip
+  tipPaidAt         DateTime? @map("tip_paid_at") @db.Timestamptz(6) // When tip was successfully paid
 
   user    User?    @relation(fields: [userId], references: [id])
   vehicle Vehicle? @relation(fields: [vehicleId], references: [id])

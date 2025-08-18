@@ -1,23 +1,23 @@
 "use server"
 import { format } from "date-fns"
-import prisma from "@/lib/prisma" // Import Prisma client
-import { getServerSession } from "next-auth" // Import getServerSession directly from next-auth
+import prisma from "@/lib/prisma"
+import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
-import { sendEmail } from "@/lib/email" // Import email utility
-import Stripe from "stripe" // NEW: Import Stripe
+import { sendEmail } from "@/lib/email"
+import Stripe from "stripe"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-07-30.basil", // Use a recent API version
+  apiVersion: "2025-07-30.basil",
 })
 
 export async function createBooking(
   prevState: { success: boolean; message: string; booking?: any; redirectUrl?: string },
   formData: FormData,
 ) {
-  const session = await getServerSession() // Get session on the server
+  const session = await getServerSession()
 
   console.error(`BOOKING_DEBUG: Full session object: ${JSON.stringify(session, null, 2)}`)
-  const userId = session?.user?.id || null // Get user ID from session, or null for guests
+  const userId = session?.user?.id || null
   console.error(`BOOKING_DEBUG: Extracted user ID: ${userId}`)
 
   const pickupLocation = formData.get("pickup-location") as string
@@ -28,7 +28,7 @@ export async function createBooking(
   const contactEmail = formData.get("contact-email") as string
   const contactPhone = formData.get("contact-phone") as string
   const paymentMethod = formData.get("payment-method") as string
-  const customMessage = formData.get("custom-message") as string // NEW: Get custom message
+  const customMessage = formData.get("custom-message") as string
 
   if (
     !pickupLocation ||
@@ -60,14 +60,14 @@ export async function createBooking(
     (isDFW(pickupLocation) && !isDFW(dropoffLocation)) ||
     (!isDFW(pickupLocation) && isDFW(dropoffLocation)) ||
     (isDAL(pickupLocation) && !isDAL(dropoffLocation)) ||
-    (isDAL(pickupLocation) && isDAL(dropoffLocation)) // Consider DAL to DAL as airport transfer if needed
+    (isDAL(pickupLocation) && isDAL(dropoffLocation))
 
   if (isAirportTransfer) {
     serviceType = "airport_transfer"
     flatRateAmount = 85.0
     totalPrice = flatRateAmount
   } else {
-    totalPrice = 100.0 // Placeholder price for non-airport rides
+    totalPrice = 100.0
   }
 
   let booking
@@ -245,6 +245,7 @@ export async function getUserBookings() {
       totalPrice: Number(booking.totalPrice),
       flatRateAmount: booking.flatRateAmount ? Number(booking.flatRateAmount) : null,
       hourlyRate: booking.hourlyRate ? Number(booking.hourlyRate) : null,
+      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null, // NEW: Serialize tip amount
     }))
 
     return { success: true, message: "Bookings fetched successfully.", bookings: serializedBookings }
@@ -254,7 +255,7 @@ export async function getUserBookings() {
   }
 }
 
-// --- NEW: Admin Booking Actions ---
+// --- Admin Booking Actions ---
 
 interface AdminBookingFilter {
   statuses?: string[] // Now an array of strings
@@ -301,6 +302,7 @@ export async function getAdminBookings(filter: AdminBookingFilter = {}) {
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
       reviewRating: booking.reviewRating ? Number(booking.reviewRating) : null,
+      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null, // NEW: Serialize tip amount
     }))
 
     return { success: true, message: "Admin bookings fetched successfully.", bookings: serializedBookings }
@@ -381,7 +383,7 @@ export async function updateBookingStatus(
         <html lang="en">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta name="viewport" content="width=device-width, initial-case-insensitive">
             <title>Update Regarding Your VIP4DFW Booking</title>
             <style>
                 body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
@@ -505,6 +507,7 @@ export async function getBookingById(bookingId: string) {
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
       reviewRating: booking.reviewRating ? Number(booking.reviewRating) : null,
+      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null, // NEW: Serialize tip amount
     }
 
     return { success: true, message: "Booking fetched successfully.", booking: serializedBooking }
@@ -588,10 +591,10 @@ export async function endTrip(bookingId: string) {
               </div>
               <hr class="hr" />
               <p class="paragraph">
-                  We value your feedback! Please take a moment to leave a review for your recent trip:
+                  We value your feedback! Please take a moment to leave a review and add a tip if you enjoyed your service:
               </p>
               <a href="${reviewLink}" class="button">
-                  Leave a Review
+                  Leave Review & Tip
               </a>
               <p class="paragraph">
                   Thank you again for your business. We look forward to serving you again soon!
@@ -641,7 +644,7 @@ export async function submitReview(bookingId: string, rating: number, message: s
   }
 }
 
-// NEW: Function to get published reviews for homepage
+// Function to get published reviews for homepage
 export async function getPublishedReviews() {
   try {
     const reviews = await prisma.booking.findMany({
@@ -672,7 +675,7 @@ export async function getPublishedReviews() {
   }
 }
 
-// NEW: Function to toggle review publication status
+// Function to toggle review publication status
 export async function toggleReviewPublication(bookingId: string) {
   const session = await getServerSession()
   // if (!session || (session.user as any).role !== "admin") {
@@ -712,5 +715,211 @@ export async function toggleReviewPublication(bookingId: string) {
   } catch (error: any) {
     console.error("Error toggling review publication:", error.message)
     return { success: false, message: `Failed to update review publication: ${error.message}` }
+  }
+}
+
+// --- NEW: TIP-RELATED ACTIONS ---
+
+export async function createTipPaymentIntent(bookingId: string, tipAmount: number) {
+  if (tipAmount <= 0) {
+    return { success: false, message: "Tip amount must be greater than $0." }
+  }
+
+  if (tipAmount > 1000) {
+    return { success: false, message: "Tip amount cannot exceed $1000." }
+  }
+
+  try {
+    // Get booking details for customer info
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        contactName: true,
+        contactEmail: true,
+        status: true,
+        tipStatus: true,
+      },
+    })
+
+    if (!booking) {
+      return { success: false, message: "Booking not found." }
+    }
+
+    if (booking.status !== "completed") {
+      return { success: false, message: "Tips can only be added to completed trips." }
+    }
+
+    if (booking.tipStatus === "paid") {
+      return { success: false, message: "A tip has already been paid for this booking." }
+    }
+
+    // Create Stripe Payment Intent for the tip
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(tipAmount * 100), // Convert to cents
+      currency: "usd",
+      metadata: {
+        bookingId: booking.id,
+        type: "tip",
+      },
+      description: `Tip for VIP4DFW Booking ${booking.id}`,
+      receipt_email: booking.contactEmail,
+    })
+
+    // Update booking with tip information
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        tipAmount: tipAmount,
+        tipStatus: "pending",
+        tipPaymentIntentId: paymentIntent.id,
+      },
+    })
+
+    revalidatePath(`/track/${bookingId}`)
+
+    return {
+      success: true,
+      message: "Tip payment intent created successfully.",
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+    }
+  } catch (error: any) {
+    console.error("Error creating tip payment intent:", error.message)
+    return { success: false, message: `Failed to create tip payment: ${error.message}` }
+  }
+}
+
+export async function confirmTipPayment(bookingId: string, paymentIntentId: string) {
+  try {
+    // Verify the payment intent with Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
+
+    if (paymentIntent.status !== "succeeded") {
+      return { success: false, message: "Payment has not been completed yet." }
+    }
+
+    // Update booking with successful tip payment
+    const booking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        tipStatus: "paid",
+        tipPaidAt: new Date(),
+      },
+    })
+
+    // Send thank you email to customer
+    const userEmail = booking.contactEmail
+    if (userEmail) {
+      const emailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Thank You for Your Tip!</title>
+          <style>
+              body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
+              .container { background-color: #ffffff; margin: 0 auto; padding: 20px 0 48px; margin-bottom: 64px; max-width: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              .header { color: #ff8c00; font-size: 28px; font-weight: bold; text-align: center; margin: 30px 0; }
+              .paragraph { color: #525f7f; font-size: 16px; line-height: 24px; text-align: left; padding: 0 30px; }
+              .hr { border-color: #e6ebf1; margin: 20px 0; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1 class="header">Thank You for Your Tip!</h1>
+              <p class="paragraph">Dear ${booking.contactName},</p>
+              <p class="paragraph">Thank you so much for your generous tip of <strong>$${booking.tipAmount?.toFixed(2)}</strong> for your recent VIP4DFW trip (Booking ID: <strong>${booking.id}</strong>).</p>
+              <p class="paragraph">Your appreciation means the world to our team and helps us continue providing exceptional service.</p>
+              <hr class="hr" />
+              <p class="paragraph">
+                  We truly appreciate your business and look forward to serving you again soon!
+                  <br /><br />
+                  With gratitude,<br />The VIP4DFW Team
+              </p>
+          </div>
+      </body>
+      </html>
+    `
+      await sendEmail({
+        to: userEmail,
+        subject: `Thank You for Your Tip - VIP4DFW Booking ${booking.id}`,
+        html: emailHtml,
+      })
+    }
+
+    // Send notification to admin about the tip
+    const adminEmail = process.env.ADMIN_EMAIL
+    if (adminEmail) {
+      const adminEmailHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>New Tip Received!</title>
+          <style>
+              body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
+              .container { background-color: #ffffff; margin: 0 auto; padding: 20px 0 48px; margin-bottom: 64px; max-width: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+              .header { color: #ff8c00; font-size: 28px; font-weight: bold; text-align: center; margin: 30px 0; }
+              .paragraph { color: #525f7f; font-size: 16px; line-height: 24px; text-align: left; padding: 0 30px; }
+              .hr { border-color: #e6ebf1; margin: 20px 0; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1 class="header">New Tip Received!</h1>
+              <p class="paragraph">Great news! A customer has left a tip for booking ${booking.id}.</p>
+              <hr class="hr" />
+              <p class="paragraph"><strong>Customer:</strong> ${booking.contactName}</p>
+              <p class="paragraph"><strong>Booking ID:</strong> ${booking.id}</p>
+              <p class="paragraph"><strong>Tip Amount:</strong> $${booking.tipAmount?.toFixed(2)}</p>
+              <p class="paragraph"><strong>Payment Status:</strong> Paid</p>
+              <hr class="hr" />
+              <p class="paragraph">
+                  This reflects the excellent service provided by your team!
+                  <br />The VIP4DFW System
+              </p>
+          </div>
+      </body>
+      </html>
+    `
+      await sendEmail({
+        to: adminEmail,
+        subject: `New Tip Received - $${booking.tipAmount?.toFixed(2)} for Booking ${booking.id}`,
+        html: adminEmailHtml,
+      })
+    }
+
+    revalidatePath(`/track/${bookingId}`)
+    revalidatePath("/admin/dashboard")
+
+    return { success: true, message: "Tip payment confirmed successfully!" }
+  } catch (error: any) {
+    console.error("Error confirming tip payment:", error.message)
+    return { success: false, message: `Failed to confirm tip payment: ${error.message}` }
+  }
+}
+
+export async function cancelTipPayment(bookingId: string) {
+  try {
+    // Reset tip information in booking
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        tipAmount: null,
+        tipStatus: "none",
+        tipPaymentIntentId: null,
+        tipPaidAt: null,
+      },
+    })
+
+    revalidatePath(`/track/${bookingId}`)
+
+    return { success: true, message: "Tip payment cancelled successfully." }
+  } catch (error: any) {
+    console.error("Error cancelling tip payment:", error.message)
+    return { success: false, message: `Failed to cancel tip payment: ${error.message}` }
   }
 }

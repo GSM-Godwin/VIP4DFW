@@ -28,10 +28,6 @@ export default async function HomePage() {
         <div>
           <p className="text-xl font-extrabold text-vipo-DEFAULT">YOU CAN TRACK OUR VEHICLES IN REAL TIME RIGHT FROM YOUR PHONE</p>
           <p className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-vipo-DEFAULT">Flat rate $85</p>
-          <p>
-            "Minimum 1 Hour Required"
-          </p>
-
         </div>
         <div className="text-lg md:text-xl text-gray-200 max-w-3xl">
           <p className="font-semibold text-vipo-DEFAULT">Cities included are:</p>
@@ -123,8 +119,9 @@ export default async function HomePage() {
             Enjoy the convenience of hourly chauffeur service for business meetings, special events, or a night out in
             Dallas. Let us handle the driving while you focus on what matters.
           </p>
-          <div className="flex flex-col items-center space-y-4">
+          <div className="flex flex-col items-center space-y-1">
             <p className="text-2xl md:text-3xl font-bold text-vipo-DEFAULT">📍 $95 per Hour</p>
+            <p>"Minimum 1 Hour Required"</p>
             <p className="text-lg text-gray-300">(Payment after the trip)</p>
           </div>
           <ul className="list-none space-y-2 text-lg md:text-xl text-gray-200 max-w-2xl mx-auto">
