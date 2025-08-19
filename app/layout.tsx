@@ -8,7 +8,7 @@ import Image from "next/image"
 import { getServerSession } from "next-auth"
 import AuthProvider from "@/components/auth-provider"
 import { Toaster } from "sonner"
-import { Phone, Mail } from 'lucide-react' // UPDATED: Import from lucide-react
+import { Phone, Mail } from 'lucide-react'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -27,7 +27,6 @@ const session = await getServerSession()
 return (
   <html lang="en">
     <head>
-      {/* NEW: Google Maps API Script */}
       <script
         async
         defer
