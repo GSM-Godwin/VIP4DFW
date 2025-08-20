@@ -1,5 +1,5 @@
 "use server"
-import { format } from "date-fns"
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz" // FIXED: Use fromZonedTime instead of zonedTimeToUtc
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
@@ -9,6 +9,21 @@ import Stripe from "stripe"
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-07-30.basil",
 })
+
+// NEW: Helper function to format time in user's timezone with abbreviation
+function formatTimeWithTimezone(date: Date, userTimezone?: string): string {
+  const timezone = userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  const formattedTime = formatInTimeZone(date, timezone, "PPP p")
+  const abbreviation = formatInTimeZone(date, timezone, "zzz")
+  return `${formattedTime} ${abbreviation}`
+}
+
+// NEW: Helper function to get user's timezone from headers (fallback to system)
+function getUserTimezone(): string {
+  // In a real app, you might get this from headers or user preferences
+  // For now, we'll use the server's detected timezone as fallback
+  return Intl.DateTimeFormat().resolvedOptions().timeZone
+}
 
 export async function createBooking(
   prevState: { success: boolean; message: string; booking?: any; redirectUrl?: string },
@@ -23,6 +38,7 @@ export async function createBooking(
   const pickupLocation = formData.get("pickup-location") as string
   const dropoffLocation = formData.get("dropoff-location") as string
   const pickupTimeStr = formData.get("date-time") as string
+  const userTimezone = (formData.get("user-timezone") as string) || getUserTimezone() // NEW: Get user timezone
   const numPassengers = Number.parseInt(formData.get("passengers") as string)
   const contactName = formData.get("contact-name") as string
   const contactEmail = formData.get("contact-email") as string
@@ -44,10 +60,14 @@ export async function createBooking(
     return { success: false, message: "All required booking fields and payment method are required." }
   }
 
-  const pickupTime = new Date(pickupTimeStr)
-  if (isNaN(pickupTime.getTime())) {
+  // FIXED: Convert user's local time to UTC for database storage
+  const pickupTimeLocal = new Date(pickupTimeStr)
+  if (isNaN(pickupTimeLocal.getTime())) {
     return { success: false, message: "Invalid date and time." }
   }
+
+  // Convert from user's timezone to UTC using fromZonedTime
+  const pickupTimeUTC = fromZonedTime(pickupTimeLocal, userTimezone)
 
   let serviceType = "city_ride"
   let flatRateAmount: number | null = null
@@ -72,16 +92,16 @@ export async function createBooking(
 
   let booking
   let checkoutSessionUrl: string | null = null
-  const initialPaymentStatus: string = paymentMethod === "cash" ? "pending_cash" : "unpaid" // 'unpaid' for card until webhook confirms
+  const initialPaymentStatus: string = paymentMethod === "cash" ? "pending_cash" : "unpaid"
 
   try {
-    // Create booking first, potentially without checkoutSessionId if cash
+    // Create booking with UTC time
     booking = await prisma.booking.create({
       data: {
         userId: userId,
         pickupLocation: pickupLocation,
         dropoffLocation: dropoffLocation,
-        pickupTime: pickupTime,
+        pickupTime: pickupTimeUTC, // NEW: Store in UTC
         numPassengers: numPassengers,
         contactName: contactName,
         contactEmail: contactEmail,
@@ -91,7 +111,7 @@ export async function createBooking(
         totalPrice: totalPrice,
         status: "pending",
         paymentStatus: initialPaymentStatus,
-        customMessage: customMessage || null, // Save custom message
+        customMessage: customMessage || null,
       },
     })
 
@@ -110,9 +130,9 @@ export async function createBooking(
               currency: "usd",
               product_data: {
                 name: `VIP4DFW Ride: ${pickupLocation} to ${dropoffLocation}`,
-                description: `Booking ID: ${booking.id} - for ${numPassengers} passengers on ${format(pickupTime, "PPP p")}`,
+                description: `Booking ID: ${booking.id} - for ${numPassengers} passengers on ${formatTimeWithTimezone(pickupTimeUTC, userTimezone)}`, // NEW: Timezone-aware
               },
-              unit_amount: Math.round(totalPrice * 100), // Amount in cents
+              unit_amount: Math.round(totalPrice * 100),
             },
             quantity: 1,
           },
@@ -121,14 +141,13 @@ export async function createBooking(
         success_url: successUrl,
         cancel_url: cancelUrl,
         metadata: {
-          bookingId: booking.id, // Pass booking ID to webhook
+          bookingId: booking.id,
         },
-        customer_email: contactEmail, // Pre-fill customer email
+        customer_email: contactEmail,
       })
 
       if (session.url) {
         checkoutSessionUrl = session.url
-        // Update booking with checkoutSessionId
         await prisma.booking.update({
           where: { id: booking.id },
           data: { checkoutSessionId: session.id },
@@ -169,7 +188,7 @@ export async function createBooking(
                     <p class="paragraph"><strong>Booking ID:</strong> ${booking.id}</p>
                     <p class="paragraph"><strong>Pickup:</strong> ${booking.pickupLocation}</p>
                     <p class="paragraph"><strong>Drop-off:</strong> ${booking.dropoffLocation}</p>
-                    <p class="paragraph"><strong>Pickup Time:</strong> ${format(booking.pickupTime, "PPP p")}</p>
+                    <p class="paragraph"><strong>Pickup Time:</strong> ${formatTimeWithTimezone(booking.pickupTime, userTimezone)}</p>
                     <p class="paragraph"><strong>Total Price:</strong> $${booking.totalPrice.toFixed(2)}</p>
                     <p class="paragraph"><strong>Payment Method:</strong> ${paymentMethod === "cash" ? "Cash on Arrival" : "Credit Card (via Stripe)"}</p>
                     <p class="paragraph"><strong>Payment Status:</strong> ${initialPaymentStatus}</p>
@@ -212,7 +231,6 @@ export async function createBooking(
   if (checkoutSessionUrl) {
     return { success: true, message: "Redirecting to payment...", redirectUrl: checkoutSessionUrl }
   } else {
-    // For cash bookings
     if (!userId) {
       return {
         success: true,
@@ -245,7 +263,7 @@ export async function getUserBookings() {
       totalPrice: Number(booking.totalPrice),
       flatRateAmount: booking.flatRateAmount ? Number(booking.flatRateAmount) : null,
       hourlyRate: booking.hourlyRate ? Number(booking.hourlyRate) : null,
-      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null, // NEW: Serialize tip amount
+      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null,
     }))
 
     return { success: true, message: "Bookings fetched successfully.", bookings: serializedBookings }
@@ -258,25 +276,20 @@ export async function getUserBookings() {
 // --- Admin Booking Actions ---
 
 interface AdminBookingFilter {
-  statuses?: string[] // Now an array of strings
+  statuses?: string[]
   searchQuery?: string
 }
 
 export async function getAdminBookings(filter: AdminBookingFilter = {}) {
   const session = await getServerSession()
-  // if (!session || (session.user as any).role !== "admin") {
-  //   return { success: false, message: "Unauthorized: You must be an admin to view all bookings.", bookings: [] }
-  // }
 
   try {
     const whereClause: any = {}
 
-    // Filter by statuses
     if (filter.statuses && filter.statuses.length > 0) {
       whereClause.status = { in: filter.statuses }
     }
 
-    // Search by query (case-insensitive, partial match)
     if (filter.searchQuery && filter.searchQuery.trim()) {
       const search = filter.searchQuery.trim().toLowerCase()
       whereClause.OR = [
@@ -302,7 +315,7 @@ export async function getAdminBookings(filter: AdminBookingFilter = {}) {
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
       reviewRating: booking.reviewRating ? Number(booking.reviewRating) : null,
-      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null, // NEW: Serialize tip amount
+      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null,
     }))
 
     return { success: true, message: "Admin bookings fetched successfully.", bookings: serializedBookings }
@@ -318,9 +331,6 @@ export async function updateBookingStatus(
   cancellationReason?: string,
 ) {
   const session = await getServerSession()
-  // if (!session || (session.user as any).role !== "admin") {
-  //   return { success: false, message: "Unauthorized: Only admins can update booking status." }
-  // }
 
   try {
     const updateData: any = { status: newStatus }
@@ -334,6 +344,7 @@ export async function updateBookingStatus(
     })
 
     const userEmail = updatedBooking.contactEmail
+    const userTimezone = getUserTimezone() // NEW: Get timezone for email formatting
     let subject = ""
     let emailHtml = ""
 
@@ -361,7 +372,7 @@ export async function updateBookingStatus(
               <div class="container">
                   <h1 class="header">Your Booking is Confirmed!</h1>
                   <p class="paragraph">Dear ${updatedBooking.contactName},</p>
-                  <p class="paragraph">Good news! Your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${format(updatedBooking.pickupTime, "PPP p")}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been confirmed.</p>
+                  <p class="paragraph">Good news! Your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${formatTimeWithTimezone(updatedBooking.pickupTime, userTimezone)}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been confirmed.</p>
                   <p class="paragraph">The total price for your trip is: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
                   ${updatedBooking.customMessage ? `<p class="paragraph"><strong>Your Message:</strong> ${updatedBooking.customMessage}</p>` : ""}
                   <p class="paragraph">You can track your driver's live location once the trip begins:</p>
@@ -399,7 +410,7 @@ export async function updateBookingStatus(
             <div class="container">
                 <h1 class="header">Update Regarding Your VIP4DFW Booking</h1>
                 <p class="paragraph">Dear ${updatedBooking.contactName},</p>
-                <p class="paragraph">We regret to inform you that your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${format(updatedBooking.pickupTime, "PPP p")}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been declined.</p>
+                <p class="paragraph">We regret to inform you that your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${formatTimeWithTimezone(updatedBooking.pickupTime, userTimezone)}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been declined.</p>
                 <p class="paragraph">The total price for your trip was: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
                 ${updatedBooking.customMessage ? `<p class="paragraph"><strong>Your Message:</strong> ${updatedBooking.customMessage}</p>` : ""}
                 <p class="paragraph">This may be due to unavailability of vehicles or drivers at the requested time. We apologize for any inconvenience this may cause.</p>
@@ -434,7 +445,7 @@ export async function updateBookingStatus(
             <div class="container">
                 <h1 class="header">Your VIP4DFW Booking Has Been Cancelled</h1>
                 <p class="paragraph">Dear ${updatedBooking.contactName},</p>
-                <p class="paragraph">We regret to inform you that your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${format(updatedBooking.pickupTime, "PPP p")}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been cancelled.</p>
+                <p class="paragraph">We regret to inform you that your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${formatTimeWithTimezone(updatedBooking.pickupTime, userTimezone)}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been cancelled.</p>
                 ${updatedBooking.cancellationReason ? `<p class="paragraph"><strong>Reason for cancellation:</strong> ${updatedBooking.cancellationReason}</p>` : ""}
                 <p class="paragraph">The total price for your trip was: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
                 <p class="paragraph">We apologize for any inconvenience this may cause. Please feel free to contact us if you have any questions or would like to re-book.</p>
@@ -469,9 +480,6 @@ export async function updateBookingStatus(
 
 export async function updateDriverLocation(bookingId: string, latitude: number, longitude: number) {
   const session = await getServerSession()
-  // if (!session || (session.user as any).role !== "admin") {
-  //   return { success: false, message: "Unauthorized: Only admins can update driver location." }
-  // }
 
   try {
     await prisma.booking.update({
@@ -507,7 +515,7 @@ export async function getBookingById(bookingId: string) {
       driverLatitude: booking.driverLatitude ? Number(booking.driverLatitude) : null,
       driverLongitude: booking.driverLongitude ? Number(booking.driverLongitude) : null,
       reviewRating: booking.reviewRating ? Number(booking.reviewRating) : null,
-      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null, // NEW: Serialize tip amount
+      tipAmount: booking.tipAmount ? Number(booking.tipAmount) : null,
     }
 
     return { success: true, message: "Booking fetched successfully.", booking: serializedBooking }
@@ -534,9 +542,6 @@ export async function updateBookingPaymentStatus(checkoutSessionId: string, newP
 
 export async function endTrip(bookingId: string) {
   const session = await getServerSession()
-  // if (!session || (session.user as any).role !== "admin") {
-  //   return { success: false, message: "Unauthorized: Only admins can end a trip." }
-  // }
 
   try {
     const booking = await prisma.booking.update({
@@ -545,6 +550,7 @@ export async function endTrip(bookingId: string) {
     })
 
     const userEmail = booking.contactEmail
+    const userTimezone = getUserTimezone() // NEW: Get timezone for email formatting
     const reviewLink = `${process.env.NEXTAUTH_URL}/track/${booking.id}`
 
     if (userEmail) {
@@ -582,7 +588,7 @@ export async function endTrip(bookingId: string) {
                       <tr><th>Service Type</th><td>${booking.serviceType.replace(/_/g, " ")}</td></tr>
                       <tr><th>Pickup Location</th><td>${booking.pickupLocation}</td></tr>
                       <tr><th>Drop-off Location</th><td>${booking.dropoffLocation}</td></tr>
-                      <tr><th>Pickup Time</th><td>${format(booking.pickupTime, "PPP p")}</td></tr>
+                      <tr><th>Pickup Time</th><td>${formatTimeWithTimezone(booking.pickupTime, userTimezone)}</td></tr>
                       <tr><th>Passengers</th><td>${booking.numPassengers}</td></tr>
                       <tr><th>Total Price</th><td>$${booking.totalPrice.toFixed(2)}</td></tr>
                       <tr><th>Payment Status</th><td>${booking.paymentStatus?.replace(/_/g, " ") || "N/A"}</td></tr>
@@ -644,7 +650,6 @@ export async function submitReview(bookingId: string, rating: number, message: s
   }
 }
 
-// Function to get published reviews for homepage
 export async function getPublishedReviews() {
   try {
     const reviews = await prisma.booking.findMany({
@@ -660,7 +665,7 @@ export async function getPublishedReviews() {
         contactName: true,
       },
       orderBy: { createdAt: "desc" },
-      take: 10, // Limit to 10 most recent published reviews
+      take: 10,
     })
 
     const serializedReviews = reviews.map((review) => ({
@@ -675,15 +680,10 @@ export async function getPublishedReviews() {
   }
 }
 
-// Function to toggle review publication status
 export async function toggleReviewPublication(bookingId: string) {
   const session = await getServerSession()
-  // if (!session || (session.user as any).role !== "admin") {
-  //   return { success: false, message: "Unauthorized: Only admins can manage review publication." }
-  // }
 
   try {
-    // First get the current status
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       select: { reviewIsPublished: true, reviewRating: true, reviewMessage: true },
@@ -697,7 +697,6 @@ export async function toggleReviewPublication(bookingId: string) {
       return { success: false, message: "No review found for this booking." }
     }
 
-    // Toggle the publication status
     const newStatus = !booking.reviewIsPublished
     await prisma.booking.update({
       where: { id: bookingId },
@@ -705,7 +704,7 @@ export async function toggleReviewPublication(bookingId: string) {
     })
 
     revalidatePath("/admin/dashboard")
-    revalidatePath("/") // Revalidate homepage to show/hide the review
+    revalidatePath("/")
 
     return {
       success: true,
@@ -718,7 +717,7 @@ export async function toggleReviewPublication(bookingId: string) {
   }
 }
 
-// --- NEW: TIP-RELATED ACTIONS ---
+// --- TIP-RELATED ACTIONS ---
 
 export async function createTipPaymentIntent(bookingId: string, tipAmount: number) {
   if (tipAmount <= 0) {
@@ -730,7 +729,6 @@ export async function createTipPaymentIntent(bookingId: string, tipAmount: numbe
   }
 
   try {
-    // Get booking details for customer info
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       select: {
@@ -754,9 +752,8 @@ export async function createTipPaymentIntent(bookingId: string, tipAmount: numbe
       return { success: false, message: "A tip has already been paid for this booking." }
     }
 
-    // Create Stripe Payment Intent for the tip
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(tipAmount * 100), // Convert to cents
+      amount: Math.round(tipAmount * 100),
       currency: "usd",
       metadata: {
         bookingId: booking.id,
@@ -766,7 +763,6 @@ export async function createTipPaymentIntent(bookingId: string, tipAmount: numbe
       receipt_email: booking.contactEmail,
     })
 
-    // Update booking with tip information
     await prisma.booking.update({
       where: { id: bookingId },
       data: {
@@ -792,14 +788,12 @@ export async function createTipPaymentIntent(bookingId: string, tipAmount: numbe
 
 export async function confirmTipPayment(bookingId: string, paymentIntentId: string) {
   try {
-    // Verify the payment intent with Stripe
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId)
 
     if (paymentIntent.status !== "succeeded") {
       return { success: false, message: "Payment has not been completed yet." }
     }
 
-    // Update booking with successful tip payment
     const booking = await prisma.booking.update({
       where: { id: bookingId },
       data: {
@@ -808,7 +802,6 @@ export async function confirmTipPayment(bookingId: string, paymentIntentId: stri
       },
     })
 
-    // Send thank you email to customer
     const userEmail = booking.contactEmail
     if (userEmail) {
       const emailHtml = `
@@ -849,7 +842,6 @@ export async function confirmTipPayment(bookingId: string, paymentIntentId: stri
       })
     }
 
-    // Send notification to admin about the tip
     const adminEmail = process.env.ADMIN_EMAIL
     if (adminEmail) {
       const adminEmailHtml = `
@@ -904,7 +896,6 @@ export async function confirmTipPayment(bookingId: string, paymentIntentId: stri
 
 export async function cancelTipPayment(bookingId: string) {
   try {
-    // Reset tip information in booking
     await prisma.booking.update({
       where: { id: bookingId },
       data: {

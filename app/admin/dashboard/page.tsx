@@ -1,20 +1,21 @@
+"use client"
 import { DialogTrigger } from "@/components/ui/dialog"
-import { redirect } from "next/navigation"
-import { getServerSession } from "next-auth"
 import { getAdminBookings } from "@/app/bookings/actions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { format } from "date-fns"
+import { formatInTimeZone } from "date-fns-tz"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AdminBookingActions } from "@/components/admin-booking-actions"
 import { AdminLocationTracker } from "@/components/admin-location-tracker"
 import { Star } from "lucide-react"
 import { Suspense } from "react"
+import { useEffect, useState } from "react"
 
 import AdminFilterForm from "./admin-filter-form"
 import { AdminReviewManager } from "@/components/admin-review-manager"
 
-export default async function AdminDashboardPage({
+export default function AdminDashboardPage({
   searchParams,
 }: {
   searchParams: Promise<{
@@ -22,23 +23,91 @@ export default async function AdminDashboardPage({
     search?: string
   }>
 }) {
-  const session = await getServerSession()
+  const [session, setSession] = useState<any>(null)
+  const [bookings, setBookings] = useState<any[]>([])
+  const [message, setMessage] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [userTimezone, setUserTimezone] = useState<string>("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [params, setParams] = useState<{ status?: string | string[]; search?: string }>({})
 
-  // if (!session || (session.user as any).role !== "admin") {
-  //   redirect("/login?error=unauthorized")
-  // }
+  // Detect admin's timezone
+  useEffect(() => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    setUserTimezone(timezone)
+  }, [])
 
-  // Await searchParams since it's now a Promise in Next.js 15
-  const params = await searchParams
+  // Helper function to format time with timezone
+  const formatTimeWithTimezone = (date: Date) => {
+    if (!userTimezone) return format(date, "PPP p")
+    const formattedTime = formatInTimeZone(date, userTimezone, "PPP p")
+    const abbreviation = formatInTimeZone(date, userTimezone, "zzz")
+    return `${formattedTime} ${abbreviation}`
+  }
 
-  // Process the status parameter correctly
+  // Fetch data on component mount
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        // Get session
+        const sessionResponse = await fetch("/api/auth/session")
+        const sessionData = await sessionResponse.json()
+        setSession(sessionData)
+
+        // Uncomment this if you want to enforce admin role
+        // if (!sessionData || (sessionData.user as any).role !== "admin") {
+        //   window.location.href = "/login?error=unauthorized"
+        //   return
+        // }
+
+        // Get search params
+        const resolvedParams = await searchParams
+        setParams(resolvedParams)
+
+        // Process the status parameter correctly
+        const statuses = Array.isArray(resolvedParams.status)
+          ? resolvedParams.status
+          : resolvedParams.status
+            ? [resolvedParams.status]
+            : []
+        const searchQuery = resolvedParams.search || ""
+
+        // Fetch bookings
+        const {
+          bookings: fetchedBookings,
+          message: fetchedMessage,
+          success: fetchedSuccess,
+        } = await getAdminBookings({
+          statuses: statuses,
+          searchQuery,
+        })
+
+        setBookings(fetchedBookings)
+        setMessage(fetchedMessage)
+        setSuccess(fetchedSuccess)
+      } catch (error) {
+        console.error("Error fetching admin data:", error)
+        setMessage("Failed to load admin data")
+        setSuccess(false)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [searchParams])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-vipo-DEFAULT text-xl">Loading admin dashboard...</p>
+      </div>
+    )
+  }
+
+  // Process the status parameter for the filter form
   const statuses = Array.isArray(params.status) ? params.status : params.status ? [params.status] : []
   const searchQuery = params.search || ""
-
-  const { bookings, message, success } = await getAdminBookings({
-    statuses: statuses,
-    searchQuery,
-  })
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
@@ -47,8 +116,9 @@ export default async function AdminDashboardPage({
           <CardTitle className="text-3xl font-bold text-vipo-DEFAULT">Admin Dashboard</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-center">
-          {/* <p className="text-lg text-gray-300">Welcome, {session.user.name || session.user.email}!</p> */}
+          {/* <p className="text-lg text-gray-300">Welcome, {session?.user?.name || session?.user?.email}!</p> */}
           <p className="text-xl font-semibold text-vipo-DEFAULT">Manage all VIP4DFW bookings here.</p>
+          {userTimezone && <p className="text-sm text-gray-400">Times displayed in your timezone: {userTimezone}</p>}
         </CardContent>
       </Card>
 
@@ -76,7 +146,9 @@ export default async function AdminDashboardPage({
                           {booking.pickupLocation} to {booking.dropoffLocation}
                         </p>
                         <p className="text-gray-300 text-sm">Booking ID: {booking.id}</p>
-                        <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
+                        <p className="text-gray-300">
+                          Date & Time: {formatTimeWithTimezone(new Date(booking.pickupTime))}
+                        </p>
                         <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
                         <p className="text-gray-300">
                           Contact: {booking.contactName} ({booking.contactEmail}, {booking.contactPhone})
@@ -176,7 +248,7 @@ export default async function AdminDashboardPage({
                               <strong>Drop-off:</strong> {booking.dropoffLocation}
                             </p>
                             <p>
-                              <strong>Time:</strong> {format(new Date(booking.pickupTime), "PPP p")}
+                              <strong>Time:</strong> {formatTimeWithTimezone(new Date(booking.pickupTime))}
                             </p>
                             <p>
                               <strong>Passengers:</strong> {booking.numPassengers}
@@ -227,7 +299,7 @@ export default async function AdminDashboardPage({
                               </p>
                             )}
                             <p>
-                              <strong>Booked At:</strong> {format(new Date(booking.createdAt), "PPP p")}
+                              <strong>Booked At:</strong> {formatTimeWithTimezone(new Date(booking.createdAt))}
                             </p>
                             {booking.driverLatitude && booking.driverLongitude && (
                               <p>

@@ -8,6 +8,7 @@ import { getBookingById } from "@/app/bookings/actions"
 import { GoogleMapComponent } from "@/components/google-map-component"
 import { ReviewForm } from "@/components/review-form"
 import { TipForm } from "@/components/tip-form"
+import { formatInTimeZone } from "date-fns-tz" // NEW: Import for timezone formatting
 
 interface BookingData {
   id: string
@@ -29,7 +30,25 @@ export default function TrackBookingPage() {
   const [booking, setBooking] = useState<BookingData | null>(null)
   const [initialLoad, setInitialLoad] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [userTimezone, setUserTimezone] = useState<string>("") // NEW: User's timezone
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // NEW: Detect user's timezone on component mount
+  useEffect(() => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    setUserTimezone(timezone)
+  }, [])
+
+  // NEW: Helper function to format time with timezone
+  const formatTimeWithTimezone = useCallback(
+    (date: Date) => {
+      if (!userTimezone) return date.toLocaleString()
+      const formattedTime = formatInTimeZone(date, userTimezone, "PPP p")
+      const abbreviation = formatInTimeZone(date, userTimezone, "zzz")
+      return `${formattedTime} ${abbreviation}`
+    },
+    [userTimezone],
+  )
 
   const fetchBookingData = useCallback(
     async (isInitial = false) => {
@@ -56,7 +75,7 @@ export default function TrackBookingPage() {
       }
     },
     [bookingId],
-  ) // bookingId is a dependency for useCallback
+  )
 
   useEffect(() => {
     fetchBookingData(true)
@@ -70,7 +89,7 @@ export default function TrackBookingPage() {
         clearInterval(intervalRef.current)
       }
     }
-  }, [bookingId, fetchBookingData]) // fetchBookingData is now a dependency
+  }, [bookingId, fetchBookingData])
 
   if (initialLoad) {
     return (
@@ -128,11 +147,16 @@ export default function TrackBookingPage() {
               <strong>Status:</strong> {booking.status}
             </p>
             <p>
-              <strong>Pickup Time:</strong> {booking.pickupTime.toLocaleString()}
+              <strong>Pickup Time:</strong> {formatTimeWithTimezone(booking.pickupTime)}{" "}
+              {/* UPDATED: Use timezone-aware formatting */}
             </p>
+            {/* NEW: Show user's timezone info */}
+            {userTimezone && (
+              <p className="text-xs text-gray-400">Times shown in your local timezone: {userTimezone}</p>
+            )}
           </div>
 
-          {/* NEW: Tip Form Section */}
+          {/* Tip Form Section */}
           {showTipForm && (
             <TipForm
               bookingId={booking.id}
@@ -157,7 +181,7 @@ export default function TrackBookingPage() {
             </div>
           )}
 
-          {/* NEW: Conditional Review Section */}
+          {/* Conditional Review Section */}
           {showReviewForm && <ReviewForm bookingId={booking.id} onReviewSubmitted={() => fetchBookingData(false)} />}
 
           {showSubmittedReview && (

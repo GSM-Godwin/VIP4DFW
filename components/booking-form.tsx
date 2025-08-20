@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Textarea } from "@/components/ui/textarea" // NEW: Import Textarea
+import { Textarea } from "@/components/ui/textarea"
 import { useActionState, useState, useEffect } from "react"
 import { createBooking } from "@/app/bookings/actions"
 import { useRouter } from "next/navigation"
@@ -23,6 +23,14 @@ export function BookingForm({ user }: BookingFormProps) {
   const router = useRouter()
   const [state, formAction, isPending] = useActionState(createBooking, { success: false, message: "" })
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash")
+  const [userTimezone, setUserTimezone] = useState<string>("")
+
+  // NEW: Detect user's timezone on component mount
+  useEffect(() => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    setUserTimezone(timezone)
+    console.log("User timezone detected:", timezone)
+  }, [])
 
   // Handle redirect after action completes
   useEffect(() => {
@@ -39,7 +47,7 @@ export function BookingForm({ user }: BookingFormProps) {
 
   return (
     <section className="w-full py-12 md:py-24 lg:py-32 bg-gray-900 flex flex-col items-center justify-center px-4">
-      {/* NEW: Display cars visually above the form */}
+      {/* Display cars visually above the form */}
       <div className="mb-8 text-center">
         <h2 className="text-3xl md:text-4xl font-bold text-vipo-DEFAULT mb-6">Our Luxury Fleet</h2>
         <div className="flex flex-col sm:flex-row justify-baseline md:items-end items-center gap-8">
@@ -73,6 +81,9 @@ export function BookingForm({ user }: BookingFormProps) {
         </CardHeader>
         <CardContent className="space-y-6">
           <form action={formAction} className="space-y-4">
+            {/* NEW: Hidden input to send user's timezone to server */}
+            <input type="hidden" name="user-timezone" value={userTimezone} />
+
             <div className="space-y-2">
               <Label htmlFor="pickup-location" className="text-gray-300">
                 Pickup Location
@@ -100,7 +111,10 @@ export function BookingForm({ user }: BookingFormProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="date-time" className="text-gray-300">
-                  Date & Time
+                  Date & Time {/* NEW: Show timezone info to user */}
+                  {userTimezone && (
+                    <span className="text-xs text-gray-400 block mt-1">Your timezone: {userTimezone}</span>
+                  )}
                 </Label>
                 <Input
                   id="date-time"
@@ -110,7 +124,7 @@ export function BookingForm({ user }: BookingFormProps) {
                   className="bg-gray-700 border-gray-600 text-white"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 md:mt-[22px]">
                 <Label htmlFor="passengers" className="text-gray-300">
                   Number of Passengers
                 </Label>
@@ -168,7 +182,7 @@ export function BookingForm({ user }: BookingFormProps) {
               />
             </div>
 
-            {/* NEW: Custom Message Textarea */}
+            {/* Custom Message Textarea */}
             <div className="space-y-2">
               <Label htmlFor="custom-message" className="text-gray-300">
                 Special Message / Notes (Optional)

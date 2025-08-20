@@ -1,19 +1,65 @@
+"use client"
+
 import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getUserBookings } from "@/app/bookings/actions"
-import { format } from "date-fns"
-import { getServerSession } from "next-auth" // Import getServerSession directly
+import { formatInTimeZone } from "date-fns-tz"
+import { useSession } from "next-auth/react"
+import { useEffect, useState } from "react"
 
-export default async function DashboardPage() {
-  const session = await getServerSession() // Get session directly
-  const user = session?.user // Extract user from session
+export default function DashboardPage() {
+  const { data: session, status } = useSession()
+  const [bookings, setBookings] = useState<any[]>([])
+  const [message, setMessage] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [userTimezone, setUserTimezone] = useState<string>("")
+  const [isLoading, setIsLoading] = useState(true)
 
-  if (!user) {
+  // Detect user's timezone
+  useEffect(() => {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    setUserTimezone(timezone)
+  }, [])
+
+  // Fetch bookings when session is available
+  useEffect(() => {
+    async function fetchBookings() {
+      if (status === "authenticated") {
+        const result = await getUserBookings()
+        setBookings(result.bookings)
+        setMessage(result.message)
+        setSuccess(result.success)
+        setIsLoading(false)
+      } else if (status === "unauthenticated") {
+        redirect("/login")
+      }
+    }
+
+    fetchBookings()
+  }, [status])
+
+  // Helper function to format time with timezone
+  const formatTimeWithTimezone = (date: Date) => {
+    if (!userTimezone) return formatInTimeZone(date, "UTC", "PPP p")
+    const formattedTime = formatInTimeZone(date, userTimezone, "PPP p")
+    const abbreviation = formatInTimeZone(date, userTimezone, "zzz")
+    return `${formattedTime} ${abbreviation}`
+  }
+
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <p className="text-vipo-DEFAULT text-xl">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!session?.user) {
     redirect("/login")
   }
 
-  const { bookings, message, success } = await getUserBookings()
+  const user = session.user
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center p-4">
@@ -24,7 +70,7 @@ export default async function DashboardPage() {
         <CardContent className="space-y-4 text-center">
           <p className="text-lg text-gray-300">Hello, {user.name || user.email}!</p>
           <p className="text-xl font-semibold text-vipo-DEFAULT">Your email: {user.email}</p>
-          <form action="/api/auth/signout" method="post"> {/* Use the standard NextAuth.js signout API route */}
+          <form action="/api/auth/signout" method="post">
             <Button
               type="submit"
               className="bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-2 px-6 rounded-full text-lg"
@@ -49,7 +95,7 @@ export default async function DashboardPage() {
                   <p className="text-lg font-semibold text-vipo-DEFAULT">
                     {booking.pickupLocation} to {booking.dropoffLocation}
                   </p>
-                  <p className="text-gray-300">Date & Time: {format(new Date(booking.pickupTime), "PPP p")}</p>
+                  <p className="text-gray-300">Date & Time: {formatTimeWithTimezone(new Date(booking.pickupTime))}</p>
                   <p className="text-gray-300">Passengers: {booking.numPassengers}</p>
                   <p className="text-gray-300">Service Type: {booking.serviceType.replace(/_/g, " ")}</p>
                   <p className="text-gray-300">Total Price: ${booking.totalPrice.toFixed(2)}</p>
@@ -65,7 +111,7 @@ export default async function DashboardPage() {
                           : "text-red-400"
                     }`}
                   >
-                    Payment: {booking.paymentStatus.replace(/_/g, " ")}
+                    Payment: {booking.paymentStatus?.replace(/_/g, " ")}
                   </p>
                 </Card>
               ))}
