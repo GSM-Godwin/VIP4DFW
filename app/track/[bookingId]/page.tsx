@@ -15,6 +15,8 @@ interface BookingData {
   pickupLocation: string
   dropoffLocation: string
   pickupTime: Date
+  totalPrice: number // ADD: Ride cost
+  paymentStatus: string | null // ADD: Payment status
   driverLatitude: number | null
   driverLongitude: number | null
   status: string
@@ -119,9 +121,10 @@ export default function TrackBookingPage() {
     )
   }
 
-  // Show tip form for completed trips (regardless of review status)
-  const showTipForm = booking.status === "completed" && booking.tipStatus !== "paid"
-  const showReviewForm = booking.status === "completed" && booking.reviewRating === null
+  // Show payment form for completed trips (regardless of review status)
+  const showPaymentForm = booking.status === "completed" && booking.paymentStatus !== "paid"
+  const showReviewForm =
+    booking.status === "completed" && booking.reviewRating === null && booking.paymentStatus === "paid"
   const showSubmittedReview = booking.status === "completed" && booking.reviewRating !== null
 
   return (
@@ -147,27 +150,33 @@ export default function TrackBookingPage() {
               <strong>Status:</strong> {booking.status}
             </p>
             <p>
-              <strong>Pickup Time:</strong> {formatTimeWithTimezone(booking.pickupTime)}{" "}
-              {/* UPDATED: Use timezone-aware formatting */}
+              <strong>Total Cost:</strong> ${booking.totalPrice.toFixed(2)}
             </p>
-            {/* NEW: Show user's timezone info */}
+            <p>
+              <strong>Payment Status:</strong> {booking.paymentStatus === "paid" ? "Paid" : "Payment Due"}
+            </p>
+            <p>
+              <strong>Pickup Time:</strong> {formatTimeWithTimezone(booking.pickupTime)}
+            </p>
             {userTimezone && (
               <p className="text-xs text-gray-400">Times shown in your local timezone: {userTimezone}</p>
             )}
           </div>
 
-          {/* Tip Form Section */}
-          {showTipForm && (
+          {/* Payment Form Section - UPDATED */}
+          {showPaymentForm && (
             <TipForm
               bookingId={booking.id}
+              rideCost={booking.totalPrice}
               driverName="Your Driver" // You can make this dynamic if you have driver info
               currentTipAmount={booking.tipAmount}
               currentTipStatus={booking.tipStatus}
-              onTipCompleted={() => fetchBookingData(false)}
+              currentPaymentStatus={booking.paymentStatus}
+              onPaymentCompleted={() => fetchBookingData(false)}
             />
           )}
 
-          {!showReviewForm && !showSubmittedReview && !showTipForm && (
+          {!showReviewForm && !showSubmittedReview && !showPaymentForm && (
             <div className="w-full h-64 rounded-lg overflow-hidden">
               {booking.driverLatitude !== null && booking.driverLongitude !== null && booking.status === "confirmed" ? (
                 <GoogleMapComponent latitude={booking.driverLatitude} longitude={booking.driverLongitude} />
@@ -202,10 +211,10 @@ export default function TrackBookingPage() {
             </div>
           )}
 
-          <p className="text-sm text-gray-400 mt-2">
+          {/* <p className="text-sm text-gray-400 mt-2">
             Note: This is a simulated tracking feature. For a real production system, a dedicated driver app and a
             robust real-time backend (e.g., WebSockets) would be used.
-          </p>
+          </p> */}
         </CardContent>
       </Card>
     </div>

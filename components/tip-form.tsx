@@ -7,21 +7,24 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DollarSign, Heart, Star } from "lucide-react"
+import { DollarSign, Heart, Star, CreditCard } from "lucide-react"
 import { useActionState } from "react"
 import { createTipPaymentIntent, confirmTipPayment, cancelTipPayment } from "@/app/bookings/actions"
 import { toast } from "sonner"
 import { loadStripe } from "@stripe/stripe-js"
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js"
 
+// Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
-interface TipFormProps {
+interface PaymentFormProps {
   bookingId: string
+  rideCost: number
   driverName?: string
   currentTipAmount?: number | null
   currentTipStatus?: string | null
-  onTipCompleted: () => void
+  currentPaymentStatus?: string | null
+  onPaymentCompleted: () => void // Callback to refresh booking data
 }
 
 // Predefined tip amounts
@@ -44,15 +47,19 @@ const cardElementOptions = {
   },
 }
 
-function TipPaymentForm({
+function PaymentProcessingForm({
   bookingId,
+  rideCost,
   tipAmount,
+  totalAmount,
   clientSecret,
   onSuccess,
   onCancel,
 }: {
   bookingId: string
+  rideCost: number
   tipAmount: number
+  totalAmount: number
   clientSecret: string
   onSuccess: () => void
   onCancel: () => void
@@ -92,12 +99,15 @@ function TipPaymentForm({
         // Confirm payment on the server
         const result = await confirmTipPayment(bookingId, paymentIntent.id)
         if (result.success) {
-          toast.success("Thank you for your tip!", {
-            description: "Your tip has been processed successfully.",
+          toast.success("Payment successful!", {
+            description:
+              tipAmount > 0
+                ? `Your ride payment and tip have been processed successfully.`
+                : `Your ride payment has been processed successfully.`,
           })
           onSuccess()
         } else {
-          toast.error("Failed to confirm tip payment", {
+          toast.error("Failed to confirm payment", {
             description: result.message,
           })
         }
@@ -116,11 +126,32 @@ function TipPaymentForm({
     <Card className="bg-gray-700 border-gray-600">
       <CardHeader>
         <CardTitle className="text-vipo-DEFAULT flex items-center gap-2">
-          <DollarSign className="w-5 h-5" />
-          Complete Your ${tipAmount.toFixed(2)} Tip
+          <CreditCard className="w-5 h-5" />
+          Complete Your Payment
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Payment Summary */}
+        <div className="p-4 bg-gray-600 rounded-lg border border-gray-500">
+          <h4 className="font-semibold text-gray-200 mb-2">Payment Summary</h4>
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-300">Ride Cost:</span>
+              <span className="text-white">${rideCost.toFixed(2)}</span>
+            </div>
+            {tipAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-300">Tip:</span>
+                <span className="text-white">${tipAmount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="border-t border-gray-500 pt-1 flex justify-between font-semibold">
+              <span className="text-gray-200">Total:</span>
+              <span className="text-vipo-DEFAULT">${totalAmount.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label className="text-gray-300">Card Information</Label>
@@ -135,7 +166,7 @@ function TipPaymentForm({
               disabled={!stripe || isProcessing}
               className="flex-1 bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold"
             >
-              {isProcessing ? "Processing..." : `Pay $${tipAmount.toFixed(2)} Tip`}
+              {isProcessing ? "Processing..." : `Pay $${totalAmount.toFixed(2)}`}
             </Button>
             <Button
               type="button"
@@ -157,29 +188,43 @@ function TipPaymentForm({
   )
 }
 
-function TipFormContent({ bookingId, driverName, currentTipAmount, currentTipStatus, onTipCompleted }: TipFormProps) {
+function PaymentFormContent({
+  bookingId,
+  rideCost,
+  driverName,
+  currentTipAmount,
+  currentTipStatus,
+  currentPaymentStatus,
+  onPaymentCompleted,
+}: PaymentFormProps) {
   const [customTipAmount, setCustomTipAmount] = useState("")
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null)
+  const [selectedTipAmount, setSelectedTipAmount] = useState<number | null>(null)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
 
-  const [createTipState, createTipAction, isCreatingTip] = useActionState(
-    async (prevState: any, formData: FormData) => {
-      const amount = selectedAmount || Number.parseFloat(customTipAmount)
+  // Check if ride payment is already completed
+  const isRidePaid = currentPaymentStatus === "paid"
+  const isTipPaid = currentTipStatus === "paid"
+  const bothPaid = isRidePaid && isTipPaid
 
-      if (!amount || amount <= 0) {
-        return { success: false, message: "Please select or enter a valid tip amount." }
+  const [createPaymentState, createPaymentAction, isCreatingPayment] = useActionState(
+    async (prevState: any, formData: FormData) => {
+      const tipAmount = selectedTipAmount || Number.parseFloat(customTipAmount) || 0
+      const totalAmount = rideCost + tipAmount
+
+      if (totalAmount <= 0) {
+        return { success: false, message: "Invalid payment amount." }
       }
 
-      const result = await createTipPaymentIntent(bookingId, amount)
+      const result = await createTipPaymentIntent(bookingId, totalAmount)
       if (result.success && result.clientSecret) {
         setClientSecret(result.clientSecret)
         setShowPaymentForm(true)
-        toast.success("Tip payment ready!", {
-          description: "Please enter your card details to complete the tip.",
+        toast.success("Payment ready!", {
+          description: "Please enter your card details to complete your payment.",
         })
       } else {
-        toast.error("Failed to create tip payment", {
+        toast.error("Failed to create payment", {
           description: result.message,
         })
       }
@@ -189,37 +234,42 @@ function TipFormContent({ bookingId, driverName, currentTipAmount, currentTipSta
   )
 
   const handleQuickTipSelect = (amount: number) => {
-    setSelectedAmount(amount)
+    setSelectedTipAmount(amount)
     setCustomTipAmount("")
   }
 
-  const handleCustomAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCustomTipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCustomTipAmount(e.target.value)
-    setSelectedAmount(null)
+    setSelectedTipAmount(null)
   }
 
   const handlePaymentSuccess = () => {
     setShowPaymentForm(false)
     setClientSecret(null)
-    setSelectedAmount(null)
+    setSelectedTipAmount(null)
     setCustomTipAmount("")
-    onTipCompleted()
+    onPaymentCompleted()
   }
 
   const handlePaymentCancel = async () => {
-    // Cancel the tip payment intent
+    // Cancel the payment intent
     await cancelTipPayment(bookingId)
     setShowPaymentForm(false)
     setClientSecret(null)
-    toast.info("Tip payment cancelled")
+    toast.info("Payment cancelled")
   }
+
+  const getTipAmount = () => selectedTipAmount || Number.parseFloat(customTipAmount) || 0
+  const getTotalAmount = () => rideCost + getTipAmount()
 
   // Show payment form if we have a client secret
   if (showPaymentForm && clientSecret) {
     return (
-      <TipPaymentForm
+      <PaymentProcessingForm
         bookingId={bookingId}
-        tipAmount={selectedAmount || Number.parseFloat(customTipAmount)}
+        rideCost={rideCost}
+        tipAmount={getTipAmount()}
+        totalAmount={getTotalAmount()}
         clientSecret={clientSecret}
         onSuccess={handlePaymentSuccess}
         onCancel={handlePaymentCancel}
@@ -227,21 +277,32 @@ function TipFormContent({ bookingId, driverName, currentTipAmount, currentTipSta
     )
   }
 
-  // Show tip already paid message
-  if (currentTipStatus === "paid" && currentTipAmount) {
+  // Show completion message if everything is paid
+  if (bothPaid) {
     return (
       <Card className="bg-gray-700 border-gray-600">
         <CardHeader>
           <CardTitle className="text-green-500 flex items-center gap-2">
-            <Heart className="w-5 h-5" />
-            Thank You for Your Tip!
+            <CreditCard className="w-5 h-5" />
+            Payment Complete!
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-center">
-          <div className="text-3xl font-bold text-vipo-DEFAULT">${currentTipAmount.toFixed(2)}</div>
+          <div className="space-y-2">
+            <div className="text-lg font-semibold text-gray-200">Ride Cost: ${rideCost.toFixed(2)}</div>
+            {currentTipAmount && currentTipAmount > 0 && (
+              <div className="text-lg font-semibold text-vipo-DEFAULT">Tip: ${currentTipAmount.toFixed(2)}</div>
+            )}
+            <div className="text-2xl font-bold text-green-500">
+              Total Paid: ${(rideCost + (currentTipAmount || 0)).toFixed(2)}
+            </div>
+          </div>
           <p className="text-gray-300">
-            Your generous tip has been processed successfully.
-            {driverName && ` ${driverName} really appreciates your kindness!`}
+            Thank you for your payment!
+            {driverName &&
+              currentTipAmount &&
+              currentTipAmount > 0 &&
+              ` ${driverName} really appreciates your generous tip!`}
           </p>
           <div className="flex justify-center">
             <div className="flex items-center gap-1">
@@ -255,101 +316,140 @@ function TipFormContent({ bookingId, driverName, currentTipAmount, currentTipSta
     )
   }
 
-  // Show tip selection form
+  // Show payment selection form
   return (
     <Card className="bg-gray-700 border-gray-600">
       <CardHeader>
         <CardTitle className="text-vipo-DEFAULT flex items-center gap-2">
-          <Heart className="w-5 h-5" />
-          Add a Tip {driverName && `for ${driverName}`}
+          <CreditCard className="w-5 h-5" />
+          Complete Your Payment
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <p className="text-gray-300 text-center">
-          Show your appreciation for excellent service! Tips go directly to your driver.
-        </p>
+        <div className="text-center p-4 bg-gray-600 rounded-lg">
+          <h4 className="text-lg font-semibold text-gray-200 mb-2">Ride Cost</h4>
+          <div className="text-3xl font-bold text-vipo-DEFAULT">${rideCost.toFixed(2)}</div>
+        </div>
 
-        <form action={createTipAction} className="space-y-4">
-          {/* Quick tip buttons */}
-          <div className="space-y-2">
-            <Label className="text-gray-300">Quick Tip Amounts</Label>
-            <div className="grid grid-cols-5 gap-2">
-              {QUICK_TIP_AMOUNTS.map((amount) => (
-                <Button
-                  key={amount}
-                  type="button"
-                  variant={selectedAmount === amount ? "default" : "outline"}
-                  className={`${
-                    selectedAmount === amount
-                      ? "bg-vipo-DEFAULT text-black"
-                      : "border-gray-500 text-gray-300 hover:bg-gray-600"
-                  }`}
-                  onClick={() => handleQuickTipSelect(amount)}
-                >
-                  ${amount}
-                </Button>
-              ))}
-            </div>
+        <div className="space-y-4">
+          <div className="text-center">
+            <h4 className="text-lg font-semibold text-gray-200 flex items-center justify-center gap-2 mb-4">
+              <Heart className="w-5 h-5" />
+              Add a Tip {driverName && `for ${driverName}`} (Optional)
+            </h4>
+            <p className="text-gray-300 text-sm">
+              Show your appreciation for excellent service! Tips go directly to your driver.
+            </p>
           </div>
 
-          {/* Custom amount input */}
-          <div className="space-y-2">
-            <Label htmlFor="custom-tip" className="text-gray-300">
-              Or Enter Custom Amount
-            </Label>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="custom-tip"
-                type="number"
-                min="0.01"
-                max="1000"
-                step="0.01"
-                placeholder="0.00"
-                value={customTipAmount}
-                onChange={handleCustomAmountChange}
-                className="pl-10 bg-gray-600 border-gray-500 text-white"
-              />
+          <form action={createPaymentAction} className="space-y-4">
+            {/* Quick tip buttons */}
+            <div className="space-y-2">
+              <Label className="text-gray-300">Quick Tip Amounts</Label>
+              <div className="grid grid-cols-5 gap-2">
+                {QUICK_TIP_AMOUNTS.map((amount) => (
+                  <Button
+                    key={amount}
+                    type="button"
+                    variant={selectedTipAmount === amount ? "default" : "outline"}
+                    className={`${
+                      selectedTipAmount === amount
+                        ? "bg-vipo-DEFAULT text-black"
+                        : "border-gray-500 text-gray-700 hover:bg-gray-600"
+                    }`}
+                    onClick={() => handleQuickTipSelect(amount)}
+                  >
+                    ${amount}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Selected amount display */}
-          {(selectedAmount || Number.parseFloat(customTipAmount) > 0) && (
+            {/* Custom tip input */}
+            <div className="space-y-2">
+              <Label htmlFor="custom-tip" className="text-gray-300">
+                Or Enter Custom Tip Amount
+              </Label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  id="custom-tip"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="5.00"
+                  placeholder="0.00"
+                  value={customTipAmount}
+                  onChange={handleCustomTipChange}
+                  className="pl-10 bg-gray-600 border-gray-500 text-white"
+                />
+              </div>
+            </div>
+
+            {/* No tip option */}
+            <div className="text-center">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-gray-500 text-gray-300 hover:bg-gray-600 bg-transparent"
+                onClick={() => {
+                  setSelectedTipAmount(null)
+                  setCustomTipAmount("")
+                }}
+                disabled={!selectedTipAmount && !Number.parseFloat(customTipAmount)}
+              >
+                No Tip - Just Pay Ride Cost
+              </Button>
+            </div>
+
+            {/* Payment summary */}
             <div className="text-center p-4 bg-gray-600 rounded-lg">
-              <p className="text-gray-300">Tip Amount:</p>
-              <p className="text-2xl font-bold text-vipo-DEFAULT">
-                ${(selectedAmount || Number.parseFloat(customTipAmount)).toFixed(2)}
-              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-gray-300">
+                  <span>Ride Cost:</span>
+                  <span>${rideCost.toFixed(2)}</span>
+                </div>
+                {getTipAmount() > 0 && (
+                  <div className="flex justify-between text-gray-300">
+                    <span>Tip:</span>
+                    <span>${getTipAmount().toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="border-t border-gray-500 pt-2 flex justify-between font-bold">
+                  <span className="text-gray-200">Total:</span>
+                  <span className="text-2xl text-vipo-DEFAULT">${getTotalAmount().toFixed(2)}</span>
+                </div>
+              </div>
             </div>
-          )}
 
-          {createTipState?.message && (
-            <div className={`text-center ${createTipState.success ? "text-green-500" : "text-red-500"}`}>
-              {createTipState.message}
-            </div>
-          )}
+            {createPaymentState?.message && (
+              <div className={`text-center ${createPaymentState.success ? "text-green-500" : "text-red-500"}`}>
+                {createPaymentState.message}
+              </div>
+            )}
 
-          <Button
-            type="submit"
-            className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg"
-            disabled={isCreatingTip || (!selectedAmount && !Number.parseFloat(customTipAmount))}
-          >
-            {isCreatingTip ? "Processing..." : "Continue to Payment"}
-          </Button>
-        </form>
+            <Button
+              type="submit"
+              className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg"
+              disabled={isCreatingPayment}
+            >
+              {isCreatingPayment ? "Processing..." : `Pay $${getTotalAmount().toFixed(2)}`}
+            </Button>
+          </form>
+        </div>
 
         <p className="text-xs text-gray-400 text-center">
-          Tips are processed securely through Stripe. Your driver will be notified of your generosity.
+          Payments are processed securely through Stripe. We never store your card information.
         </p>
       </CardContent>
     </Card>
   )
 }
 
-export function TipForm(props: TipFormProps) {
+export function TipForm(props: PaymentFormProps) {
   return (
     <Elements stripe={stripePromise}>
-      <TipFormContent {...props} />
+      <PaymentFormContent {...props} />
     </Elements>
   )
 }

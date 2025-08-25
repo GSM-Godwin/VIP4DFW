@@ -37,7 +37,7 @@ return (
       <AuthProvider session={session}>
         <header className="bg-gray-900 text-white p-4 flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/images/vip4dfw-logo-orange.png" alt="VIP4DFW Logo" width={50} height={50} />
+            <Image src="/images/vip4dfw-logo-orange.png" alt="VIP4DFW Logo" width={70} height={70} />
             <span className="text-2xl font-bold text-vipo-DEFAULT hidden md:block">VIP4DFW</span>
           </Link>
           <nav>

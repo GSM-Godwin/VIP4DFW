@@ -90,10 +90,10 @@ export async function createBooking(
     totalPrice = 100.0
   }
 
-  let booking
-  let checkoutSessionUrl: string | null = null
-  const initialPaymentStatus: string = paymentMethod === "cash" ? "pending_cash" : "unpaid"
+  // UPDATED: All bookings are now set to "unpaid" status initially
+  const initialPaymentStatus: string = "unpaid"
 
+  let booking
   try {
     // Create booking with UTC time
     booking = await prisma.booking.create({
@@ -110,56 +110,17 @@ export async function createBooking(
         flatRateAmount: totalPrice,
         totalPrice: totalPrice,
         status: "pending",
-        paymentStatus: initialPaymentStatus,
+        paymentStatus: initialPaymentStatus, // UPDATED: Always "unpaid"
         customMessage: customMessage || null,
       },
     })
 
-    if (paymentMethod === "card") {
-      if (!process.env.NEXTAUTH_URL) {
-        throw new Error("NEXTAUTH_URL is not defined in environment variables.")
-      }
-      const successUrl = `${process.env.NEXTAUTH_URL}/booking-success-guest?booking_id=${booking.id}&payment_status=paid`
-      const cancelUrl = `${process.env.NEXTAUTH_URL}/booking-success-guest?booking_id=${booking.id}&payment_status=cancelled`
-
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: {
-                name: `VIP4DFW Ride: ${pickupLocation} to ${dropoffLocation}`,
-                description: `Booking ID: ${booking.id} - for ${numPassengers} passengers on ${formatTimeWithTimezone(pickupTimeUTC, userTimezone)}`, // NEW: Timezone-aware
-              },
-              unit_amount: Math.round(totalPrice * 100),
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: {
-          bookingId: booking.id,
-        },
-        customer_email: contactEmail,
-      })
-
-      if (session.url) {
-        checkoutSessionUrl = session.url
-        await prisma.booking.update({
-          where: { id: booking.id },
-          data: { checkoutSessionId: session.id },
-        })
-      } else {
-        throw new Error("Failed to create Stripe Checkout session URL.")
-      }
-    }
+    // REMOVED: Stripe checkout session creation - no immediate payment
 
     const adminEmail = process.env.ADMIN_EMAIL
     if (adminEmail) {
       const adminDashboardUrl = `${process.env.NEXTAUTH_URL}/admin/dashboard?bookingId=${booking.id}`
+      // UPDATED: Email content reflects new payment flow
       const emailHtml = `
         <!DOCTYPE html>
         <html lang="en">
@@ -190,8 +151,8 @@ export async function createBooking(
                     <p class="paragraph"><strong>Drop-off:</strong> ${booking.dropoffLocation}</p>
                     <p class="paragraph"><strong>Pickup Time:</strong> ${formatTimeWithTimezone(booking.pickupTime, userTimezone)}</p>
                     <p class="paragraph"><strong>Total Price:</strong> $${booking.totalPrice.toFixed(2)}</p>
-                    <p class="paragraph"><strong>Payment Method:</strong> ${paymentMethod === "cash" ? "Cash on Arrival" : "Credit Card (via Stripe)"}</p>
-                    <p class="paragraph"><strong>Payment Status:</strong> ${initialPaymentStatus}</p>
+                    <p class="paragraph"><strong>Payment Method:</strong> ${paymentMethod === "cash" ? "Cash or Card on Arrival" : "Pay by Card After Ride"}</p>
+                    <p class="paragraph"><strong>Payment Status:</strong> Payment due after ride completion</p>
                     ${booking.customMessage ? `<p class="paragraph"><strong>Custom Message:</strong> ${booking.customMessage}</p>` : ""}
                 </div>
                 <hr class="hr" />
@@ -224,22 +185,19 @@ export async function createBooking(
       console.warn("ADMIN_EMAIL environment variable is not set. Admin notification email skipped.")
     }
   } catch (error: any) {
-    console.error("Error creating booking or Stripe session:", error.message)
+    console.error("Error creating booking:", error.message)
     return { success: false, message: `Failed to create booking: ${error.message}` }
   }
 
-  if (checkoutSessionUrl) {
-    return { success: true, message: "Redirecting to payment...", redirectUrl: checkoutSessionUrl }
-  } else {
-    if (!userId) {
-      return {
-        success: true,
-        message: "Booking confirmed! Redirecting to guest success page...",
-        redirectUrl: `/booking-success-guest?booking_id=${booking.id}&payment_status=pending_cash`,
-      }
+  // UPDATED: Always redirect to success page for guests, no Stripe checkout
+  if (!userId) {
+    return {
+      success: true,
+      message: "Booking confirmed! Redirecting to guest success page...",
+      redirectUrl: `/booking-success-guest?booking_id=${booking.id}&payment_status=unpaid`,
     }
-    return { success: true, message: "Booking confirmed! Cash payment due upon arrival.", booking: booking }
   }
+  return { success: true, message: "Booking confirmed! Payment will be processed after your ride.", booking: booking }
 }
 
 export async function getUserBookings() {
@@ -373,7 +331,7 @@ export async function updateBookingStatus(
                   <h1 class="header">Your Booking is Confirmed!</h1>
                   <p class="paragraph">Dear ${updatedBooking.contactName},</p>
                   <p class="paragraph">Good news! Your VIP4DFW booking (ID: <strong>${updatedBooking.id}</strong>) for <strong>${formatTimeWithTimezone(updatedBooking.pickupTime, userTimezone)}</strong> from <strong>${updatedBooking.pickupLocation}</strong> to <strong>${updatedBooking.dropoffLocation}</strong> has been confirmed.</p>
-                  <p class="paragraph">The total price for your trip is: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong>.</p>
+                  <p class="paragraph">The total price for your trip is: <strong>$${updatedBooking.totalPrice.toFixed(2)}</strong> (payment due after ride completion).</p>
                   ${updatedBooking.customMessage ? `<p class="paragraph"><strong>Your Message:</strong> ${updatedBooking.customMessage}</p>` : ""}
                   <p class="paragraph">You can track your driver's live location once the trip begins:</p>
                   <a href="${trackingLink}" class="button">
@@ -560,7 +518,7 @@ export async function endTrip(bookingId: string) {
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Your VIP4DFW Trip Receipt!</title>
+          <title>Your VIP4DFW Trip Complete - Payment & Review</title>
           <style>
               body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Ubuntu,sans-serif; background-color: #f6f9fc; margin: 0; padding: 0; }
               .container { background-color: #ffffff; margin: 0 auto; padding: 20px 0 48px; margin-bottom: 64px; max-width: 600px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -573,13 +531,24 @@ export async function endTrip(bookingId: string) {
               .invoice-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
               .invoice-table th, .invoice-table td { border: 1px solid #e6ebf1; padding: 10px; text-align: left; }
               .invoice-table th { background-color: #f0f2f5; }
+              .payment-notice { background-color: #fff3cd; border: 1px solid #ffecb5; border-radius: 5px; padding: 15px; margin: 20px 0; text-align: center; }
           </style>
       </head>
       <body>
           <div class="container">
-              <h1 class="header">Your VIP4DFW Trip Receipt!</h1>
+              <h1 class="header">Trip Complete - Payment Due</h1>
               <p class="paragraph">Dear ${booking.contactName},</p>
               <p class="paragraph">Thank you for choosing VIP4DFW for your recent trip. We hope you had a comfortable and safe journey!</p>
+              
+              <div class="payment-notice">
+                  <p style="margin: 0; color: #856404; font-weight: bold;">
+                      💳 Payment Due: $${booking.totalPrice.toFixed(2)}
+                  </p>
+                  <p style="margin: 5px 0 0 0; color: #856404; font-size: 14px;">
+                      Please complete your payment and leave a review using the link below.
+                  </p>
+              </div>
+              
               <hr class="hr" />
               <div class="section">
                   <p class="heading">Trip Details:</p>
@@ -590,17 +559,16 @@ export async function endTrip(bookingId: string) {
                       <tr><th>Drop-off Location</th><td>${booking.dropoffLocation}</td></tr>
                       <tr><th>Pickup Time</th><td>${formatTimeWithTimezone(booking.pickupTime, userTimezone)}</td></tr>
                       <tr><th>Passengers</th><td>${booking.numPassengers}</td></tr>
-                      <tr><th>Total Price</th><td>$${booking.totalPrice.toFixed(2)}</td></tr>
-                      <tr><th>Payment Status</th><td>${booking.paymentStatus?.replace(/_/g, " ") || "N/A"}</td></tr>
+                      <tr><th>Total Amount Due</th><td style="font-weight: bold;">$${booking.totalPrice.toFixed(2)}</td></tr>
                       ${booking.customMessage ? `<tr><th>Your Message</th><td>${booking.customMessage}</td></tr>` : ""}
                   </table>
               </div>
               <hr class="hr" />
               <p class="paragraph">
-                  We value your feedback! Please take a moment to leave a review and add a tip if you enjoyed your service:
+                  Please complete your payment and share your experience:
               </p>
               <a href="${reviewLink}" class="button">
-                  Leave Review & Tip
+                  Pay Now & Leave Review
               </a>
               <p class="paragraph">
                   Thank you again for your business. We look forward to serving you again soon!
@@ -612,16 +580,16 @@ export async function endTrip(bookingId: string) {
     `
       await sendEmail({
         to: userEmail,
-        subject: `Your VIP4DFW Trip Receipt for Booking ${booking.id}`,
+        subject: `Trip Complete - Payment Due for VIP4DFW Booking ${booking.id}`,
         html: emailHtml,
       })
     } else {
-      console.warn(`User email missing for booking ${bookingId}. Invoice email skipped.`)
+      console.warn(`User email missing for booking ${bookingId}. Payment notification email skipped.`)
     }
 
     revalidatePath("/admin/dashboard")
     revalidatePath(`/track/${bookingId}`)
-    return { success: true, message: `Booking ${bookingId} marked as completed and invoice sent.` }
+    return { success: true, message: `Booking ${bookingId} marked as completed and payment notification sent.` }
   } catch (error: any) {
     console.error("Error ending trip:", error.message)
     return { success: false, message: `Failed to end trip: ${error.message}` }

@@ -32,16 +32,11 @@ export function BookingForm({ user }: BookingFormProps) {
     console.log("User timezone detected:", timezone)
   }, [])
 
-  // Handle redirect after action completes
+  // Handle redirect after action completes - UPDATED: Remove Stripe checkout redirect
   useEffect(() => {
     if (state.success && state.redirectUrl) {
-      // If it's a Stripe checkout URL, redirect directly
-      if (state.redirectUrl.startsWith("http")) {
-        window.location.href = state.redirectUrl
-      } else {
-        // Otherwise, it's an internal Next.js redirect
-        router.push(state.redirectUrl)
-      }
+      // Only handle internal Next.js redirects now (no more Stripe checkout URLs)
+      router.push(state.redirectUrl)
     }
   }, [state, router])
 
@@ -80,6 +75,15 @@ export function BookingForm({ user }: BookingFormProps) {
           <CardTitle className="text-3xl font-bold text-vipo-DEFAULT">Book Your VIP Ride Today</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* NEW: Add notice about payment timing */}
+          <div className="text-center p-3 bg-gray-700 rounded-lg border border-gray-600">
+            <p className="text-sm text-gray-300">
+              <strong className="text-vipo-DEFAULT">No upfront payment required!</strong>
+              <br />
+              Reserve your ride now and pay at the end of your trip.
+            </p>
+          </div>
+
           <form action={formAction} className="space-y-4">
             {/* NEW: Hidden input to send user's timezone to server */}
             <input type="hidden" name="user-timezone" value={userTimezone} />
@@ -196,7 +200,7 @@ export function BookingForm({ user }: BookingFormProps) {
               />
             </div>
 
-            {/* Payment Method Selection */}
+            {/* Payment Method Selection - UPDATED: New labels and description */}
             <div className="space-y-2">
               <Label className="text-gray-300">Payment Method</Label>
               <RadioGroup
@@ -215,18 +219,23 @@ export function BookingForm({ user }: BookingFormProps) {
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="card" id="payment-card" />
                   <Label htmlFor="payment-card" className="text-gray-300">
-                    Credit Card (Pay Now)
+                    Pay by Card After Ride
                   </Label>
                 </div>
               </RadioGroup>
+              <p className="text-xs text-gray-400 mt-2">
+                All payments are processed at the end of your completed ride. Card payments include the option to add a
+                tip.
+              </p>
             </div>
 
+            {/* UPDATED: Simplified button text */}
             <Button
               type="submit"
               className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg"
               disabled={isPending}
             >
-              {isPending ? "Processing..." : selectedPaymentMethod === "card" ? "Proceed to Payment" : "Reserve Now"}
+              {isPending ? "Processing..." : "Reserve Now"}
             </Button>
           </form>
           {state?.message && !state.redirectUrl && (

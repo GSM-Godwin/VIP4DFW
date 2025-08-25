@@ -1,49 +1,26 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { CheckCircle, XCircle } from "lucide-react" // NEW: Import XCircle for cancelled payments
+import { CheckCircle, MapPin } from "lucide-react"
 
 export default function BookingSuccessGuestPage({
   searchParams,
 }: {
-  searchParams: { booking_id?: string; payment_status?: string } // NEW: payment_status search param
+  searchParams: { booking_id?: string; payment_status?: string }
 }) {
   const bookingId = searchParams.booking_id
-  const paymentStatus = searchParams.payment_status || "unknown" // Default to 'unknown'
+  const paymentStatus = searchParams.payment_status || "unpaid"
 
-  const isPaid = paymentStatus === "paid"
-  const isCash = paymentStatus === "pending_cash"
-  const isCancelled = paymentStatus === "cancelled"
-
-  let title = "Booking Confirmed!"
-  let icon = <CheckCircle className="w-8 h-8" />
-  let message = "Your booking has been successfully placed."
-  let paymentInfo = ""
-
-  if (isPaid) {
-    title = "Payment Successful!"
-    message = "Your booking has been successfully placed and payment received."
-    paymentInfo = "Your payment has been processed."
-  } else if (isCash) {
-    paymentInfo = "For cash payments, please pay your driver upon arrival."
-  } else if (isCancelled) {
-    title = "Payment Cancelled"
-    icon = <XCircle className="w-8 h-8 text-red-500" />
-    message = "Your payment was cancelled or failed. Your booking may not be confirmed."
-    paymentInfo = "Please try booking again or contact us for assistance."
-  } else {
-    title = "Booking Status Unknown"
-    icon = <XCircle className="w-8 h-8 text-yellow-500" />
-    message = "We could not determine the status of your booking. Please contact us."
-  }
+  // With the new payment flow, all bookings start as "unpaid" and payment happens after ride completion
+  const title = "Booking Confirmed!"
+  const icon = <CheckCircle className="w-8 h-8" />
+  const message = "Your VIP4DFW booking has been successfully placed and is pending confirmation."
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-gray-800 text-white border-vipo-DEFAULT text-center">
         <CardHeader>
-          <CardTitle
-            className={`text-3xl font-bold ${isPaid ? "text-green-500" : isCancelled ? "text-red-500" : "text-vipo-DEFAULT"} flex items-center justify-center gap-2`}
-          >
+          <CardTitle className="text-3xl font-bold text-vipo-DEFAULT flex items-center justify-center gap-2">
             {icon} {title}
           </CardTitle>
         </CardHeader>
@@ -56,29 +33,66 @@ export default function BookingSuccessGuestPage({
               </span>
             )}
           </p>
-          <p className="text-gray-300">{paymentInfo}</p>
-          <p className="text-xl font-semibold text-vipo-DEFAULT">
-            Want to manage your bookings and save your details for next time?
-          </p>
-          <div className="flex flex-col gap-4">
-            <Link href="/login">
-              <Button className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg">
-                Login to Your Account
-              </Button>
-            </Link>
-            <Link href="/signup">
+
+          {/* Payment Information */}
+          <div className="p-4 bg-gray-700 rounded-lg border border-gray-600">
+            <h3 className="text-lg font-semibold text-vipo-DEFAULT mb-2">Payment Information</h3>
+            <p className="text-gray-300 text-sm">
+              <strong>No upfront payment required!</strong>
+              <br />
+              You'll pay at the end of your completed ride. We'll send you a secure payment link when your trip is
+              finished.
+            </p>
+          </div>
+
+          {/* Next Steps */}
+          <div className="p-4 bg-gray-700 rounded-lg border border-gray-600">
+            <h3 className="text-lg font-semibold text-vipo-DEFAULT mb-2">What Happens Next?</h3>
+            <div className="text-left text-gray-300 text-sm space-y-1">
+              <p>1. We'll review and confirm your booking</p>
+              <p>2. You'll receive a confirmation email</p>
+              <p>3. Track your driver on the day of your trip</p>
+              <p>4. Pay securely after your ride is complete</p>
+            </div>
+          </div>
+
+          {/* Tracking Link */}
+          {bookingId && (
+            <Link href={`/track/${bookingId}`}>
               <Button
                 variant="outline"
-                className="w-full border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black font-bold py-3 text-lg bg-transparent"
+                className="w-full border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black font-bold py-3 text-lg bg-transparent flex items-center gap-2"
               >
-                Create a New Account
+                <MapPin className="w-5 h-5" />
+                Track Your Booking
               </Button>
             </Link>
-            <Link href="/">
-              <Button variant="link" className="text-gray-400 hover:underline">
-                Continue as Guest
-              </Button>
-            </Link>
+          )}
+
+          <div className="border-t border-gray-600 pt-4">
+            <p className="text-xl font-semibold text-vipo-DEFAULT mb-4">
+              Want to manage your bookings and save your details for next time?
+            </p>
+            <div className="flex flex-col gap-4">
+              <Link href="/login">
+                <Button className="w-full bg-vipo-DEFAULT hover:bg-vipo-dark text-black font-bold py-3 text-lg">
+                  Login to Your Account
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button
+                  variant="outline"
+                  className="w-full border-vipo-DEFAULT text-vipo-DEFAULT hover:bg-vipo-DEFAULT hover:text-black font-bold py-3 text-lg bg-transparent"
+                >
+                  Create a New Account
+                </Button>
+              </Link>
+              <Link href="/">
+                <Button variant="link" className="text-gray-400 hover:underline">
+                  Continue as Guest
+                </Button>
+              </Link>
+            </div>
           </div>
         </CardContent>
       </Card>
